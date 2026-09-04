@@ -23,11 +23,7 @@ export default function ProtectedRoute({ children, allowedRole }) {
   // Enforce role-based access control
   if (allowedRole && role && role !== allowedRole) {
     const destination =
-      role === "admin"
-        ? "/admin/dashboard"
-        : role === "government"
-        ? "/government/dashboard"
-        : "/startup/dashboard";
+      role === "government" ? "/government/dashboard" : "/startup/dashboard";
     return <Navigate to={destination} replace />;
   }
 

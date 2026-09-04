@@ -59,19 +59,6 @@ export function AuthProvider({ children }) {
         website: "https://apexvision.ai",
       },
     },
-    admin: {
-      user: { id: "demo-admin-001", email: "admin@udyamsetu.gov.in" },
-      profile: {
-        id: "demo-admin-001",
-        full_name: "National Portal Admin",
-        email: "admin@udyamsetu.gov.in",
-        phone: "+91 11 2345 6789",
-        role: "admin",
-        verification_status: "verified",
-        organization_name: "UdyamSetu Sovereign Governance Gateway",
-        designation: "Lead Systems Auditor",
-      },
-    },
   };
 
   // Fetch or initialize profile record

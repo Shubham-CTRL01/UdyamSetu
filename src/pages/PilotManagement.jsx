@@ -346,15 +346,6 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
   const navigate = useNavigate();
   const [negotiations, setNegotiations] = useState([]);
   const [loadingNegotiations, setLoadingNegotiations] = useState(true);
-  const [showResultForm, setShowResultForm] = useState(false);
-  const [resultForm, setResultForm] = useState({
-    outcome: "",
-    success_metrics: "",
-    government_feedback: "",
-    startup_feedback: "",
-    final_recommendation: "scale",
-  });
-  const [resultLoading, setResultLoading] = useState(false);
 
   const isGovernment = profile?.role === "government";
   const challenge = offer.challenges;
@@ -393,28 +384,6 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
       onUpdated();
     } catch (err) {
       console.error("Status update error:", err);
-    }
-  };
-
-  const handlePilotResult = async (e) => {
-    e.preventDefault();
-    setResultLoading(true);
-    try {
-      const { error } = await supabase.from("pilot_results").insert({
-        pilot_offer_id: offer.id,
-        outcome: resultForm.outcome,
-        success_metrics: resultForm.success_metrics,
-        government_feedback: resultForm.government_feedback,
-        startup_feedback: resultForm.startup_feedback,
-        final_recommendation: resultForm.final_recommendation,
-      });
-      if (error) throw error;
-      setShowResultForm(false);
-      onUpdated();
-    } catch (err) {
-      console.error("Result error:", err);
-    } finally {
-      setResultLoading(false);
     }
   };
 
@@ -550,18 +519,29 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
           />
         </div>
 
-        {/* Pilot Results (only when completed) */}
-        {offerData.status === "completed" && (
+        {/* Milestone Tracker (accepted / in_progress) */}
+        {(offerData.status === "accepted" || offerData.status === "in_progress") && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 mb-3">Pilot Results</h3>
+            <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <List className="w-4 h-4 text-slate-600" />
+              Milestones
+            </h3>
+            <MilestoneTracker pilotOfferId={offerData.id} isGovernment={isGovernment} />
+          </div>
+        )}
+
+        {/* Pilot Results / Evaluation */}
+        {(offerData.status === "in_progress" || offerData.status === "completed") && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-900 mb-3">Pilot Results &amp; Evaluation</h3>
             <PilotResultsView offerId={offerData.id} isGovernment={isGovernment} onUpdated={onUpdated} />
           </div>
         )}
 
-        {/* Mark complete + results (government only, when in_progress) */}
+        {/* Mark complete (government only, when in_progress) */}
         {offerData.status === "in_progress" && isGovernment && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 mb-3">Complete Pilot & Evaluate</h3>
+            <h3 className="text-sm font-bold text-slate-900 mb-3">Complete Pilot</h3>
             <button
               onClick={() => handleStatusUpdate("completed")}
               className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2"
@@ -569,7 +549,7 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
               <Check className="w-4 h-4" /> Mark Pilot as Completed
             </button>
             <p className="text-xs text-slate-400 mt-2">
-              After completion, you can submit pilot results and evaluation.
+              Submit pilot results and evaluation above before or after marking complete.
             </p>
           </div>
         )}
@@ -650,59 +630,403 @@ function AIAnalysisForPilot({ application, challenge, offer }) {
   return matchData ? <AIMatchPanel matchData={matchData} /> : <p className="text-xs text-slate-400">No analysis available.</p>;
 }
 
-// Pilot Results view
+// Milestone Management
+const MILESTONE_STATUS_COLOR = {
+  pending: "bg-slate-100 text-slate-600 border-slate-200",
+  submitted: "bg-blue-100 text-blue-700 border-blue-200",
+  under_review: "bg-amber-100 text-amber-700 border-amber-200",
+  approved: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  rejected: "bg-rose-100 text-rose-700 border-rose-200",
+};
+
+const PAYMENT_STATUS_LABEL = {
+  not_due: "Not Due", pending: "Pending", approved: "Approved", released: "Released",
+};
+
+function MilestoneTracker({ pilotOfferId, isGovernment }) {
+  const [milestones, setMilestones] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newMilestone, setNewMilestone] = useState({
+    title: "", description: "", due_date: "", deliverable: "", kpi: "", payment_amount: "",
+  });
+  const [submitResults, setSubmitResults] = useState({}); // { [milestoneId]: text }
+  const [busyId, setBusyId] = useState(null);
+
+  const loadMilestones = useCallback(async () => {
+    setLoading(true);
+    const { data } = await supabase
+      .from("pilot_milestones")
+      .select("*")
+      .eq("pilot_offer_id", pilotOfferId)
+      .order("due_date", { ascending: true, nullsFirst: false });
+    setMilestones(data || []);
+    setLoading(false);
+  }, [pilotOfferId]);
+
+  useEffect(() => { loadMilestones(); }, [loadMilestones]);
+
+  const handleAddMilestone = async (e) => {
+    e.preventDefault();
+    if (!newMilestone.title) return;
+    setBusyId("new");
+    try {
+      const { error } = await supabase.from("pilot_milestones").insert({
+        pilot_offer_id: pilotOfferId,
+        title: newMilestone.title,
+        description: newMilestone.description || null,
+        due_date: newMilestone.due_date || null,
+        deliverable: newMilestone.deliverable || null,
+        kpi: newMilestone.kpi || null,
+        payment_amount: newMilestone.payment_amount ? Number(newMilestone.payment_amount) : null,
+      });
+      if (!error) {
+        setNewMilestone({ title: "", description: "", due_date: "", deliverable: "", kpi: "", payment_amount: "" });
+        setShowAddForm(false);
+        await loadMilestones();
+      }
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const submitMilestoneResult = async (id) => {
+    setBusyId(id);
+    try {
+      await supabase.from("pilot_milestones").update({
+        submitted_result: submitResults[id] || "",
+        status: "submitted",
+      }).eq("id", id);
+      await loadMilestones();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const updateMilestoneStatus = async (id, status) => {
+    setBusyId(id);
+    try {
+      await supabase.from("pilot_milestones").update({ status }).eq("id", id);
+      await loadMilestones();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const updatePaymentStatus = async (id, payment_status) => {
+    setBusyId(id);
+    try {
+      await supabase.from("pilot_milestones").update({ payment_status }).eq("id", id);
+      await loadMilestones();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (loading) return <Loader2 className="w-5 h-5 animate-spin text-slate-400" />;
+
+  return (
+    <div className="space-y-4">
+      {milestones.length === 0 && (
+        <p className="text-xs text-slate-400">No milestones defined yet.</p>
+      )}
+
+      {milestones.map((m) => (
+        <div key={m.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <strong className="text-sm text-slate-900">{m.title}</strong>
+            <div className="flex items-center gap-1.5">
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${MILESTONE_STATUS_COLOR[m.status]}`}>
+                {m.status.replace("_", " ")}
+              </span>
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                {PAYMENT_STATUS_LABEL[m.payment_status]}
+              </span>
+            </div>
+          </div>
+          {m.description && <p className="text-xs text-slate-600 mb-1.5">{m.description}</p>}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-slate-500 mb-2">
+            {m.due_date && <span>Due: {formatDate(m.due_date)}</span>}
+            {m.deliverable && <span>Deliverable: {m.deliverable}</span>}
+            {m.kpi && <span>KPI: {m.kpi}</span>}
+            {m.payment_amount != null && <span>Payment: {formatCurrency(m.payment_amount)}</span>}
+          </div>
+
+          {m.submitted_result && (
+            <div className="mt-2 p-2.5 bg-white rounded-lg border border-slate-200 text-xs text-slate-700">
+              <span className="font-semibold text-slate-500 uppercase text-[10px] block mb-1">Submitted Result</span>
+              {m.submitted_result}
+            </div>
+          )}
+
+          {/* Startup: submit result when pending */}
+          {!isGovernment && m.status === "pending" && (
+            <div className="mt-2 space-y-2">
+              <textarea
+                value={submitResults[m.id] || ""}
+                onChange={(e) => setSubmitResults((prev) => ({ ...prev, [m.id]: e.target.value }))}
+                placeholder="Describe what was achieved for this milestone..."
+                rows={2}
+                className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none resize-none"
+              />
+              <button
+                onClick={() => submitMilestoneResult(m.id)}
+                disabled={busyId === m.id || !submitResults[m.id]}
+                className="px-3 py-1.5 bg-[#0B192C] text-white text-xs font-semibold rounded-lg disabled:opacity-50"
+              >
+                {busyId === m.id ? "Submitting..." : "Submit Result"}
+              </button>
+            </div>
+          )}
+
+          {/* Government: approve/reject when submitted or under review, set payment */}
+          {isGovernment && (m.status === "submitted" || m.status === "under_review") && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button onClick={() => updateMilestoneStatus(m.id, "approved")} disabled={busyId === m.id}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg disabled:opacity-50">
+                Approve
+              </button>
+              <button onClick={() => updateMilestoneStatus(m.id, "under_review")} disabled={busyId === m.id || m.status === "under_review"}
+                className="px-3 py-1.5 border border-slate-200 text-slate-600 text-xs font-semibold rounded-lg disabled:opacity-50">
+                Mark Under Review
+              </button>
+              <button onClick={() => updateMilestoneStatus(m.id, "rejected")} disabled={busyId === m.id}
+                className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 text-xs font-semibold rounded-lg disabled:opacity-50">
+                Reject
+              </button>
+            </div>
+          )}
+
+          {isGovernment && m.status === "approved" && m.payment_status !== "released" && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-[11px] text-slate-500">Payment:</span>
+              {["pending", "approved", "released"].map((ps) => (
+                <button key={ps} onClick={() => updatePaymentStatus(m.id, ps)} disabled={busyId === m.id || m.payment_status === ps}
+                  className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg border ${
+                    m.payment_status === ps ? "bg-[#0B192C] text-white border-[#0B192C]" : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                  }`}>
+                  {PAYMENT_STATUS_LABEL[ps]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {isGovernment && (
+        showAddForm ? (
+          <form onSubmit={handleAddMilestone} className="p-4 rounded-xl border border-dashed border-slate-300 space-y-2">
+            <input value={newMilestone.title} onChange={(e) => setNewMilestone({ ...newMilestone, title: e.target.value })}
+              placeholder="Milestone title" required
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none" />
+            <textarea value={newMilestone.description} onChange={(e) => setNewMilestone({ ...newMilestone, description: e.target.value })}
+              placeholder="Description" rows={2}
+              className="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none resize-none" />
+            <div className="grid grid-cols-2 gap-2">
+              <input type="date" value={newMilestone.due_date} onChange={(e) => setNewMilestone({ ...newMilestone, due_date: e.target.value })}
+                className="px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none" />
+              <input type="number" value={newMilestone.payment_amount} onChange={(e) => setNewMilestone({ ...newMilestone, payment_amount: e.target.value })}
+                placeholder="Payment amount (₹)"
+                className="px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none" />
+              <input value={newMilestone.deliverable} onChange={(e) => setNewMilestone({ ...newMilestone, deliverable: e.target.value })}
+                placeholder="Deliverable"
+                className="px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none" />
+              <input value={newMilestone.kpi} onChange={(e) => setNewMilestone({ ...newMilestone, kpi: e.target.value })}
+                placeholder="KPI"
+                className="px-3 py-2 text-xs border border-slate-200 rounded-lg outline-none" />
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="submit" disabled={busyId === "new"}
+                className="px-4 py-1.5 bg-[#0B192C] text-white text-xs font-semibold rounded-lg disabled:opacity-50">
+                {busyId === "new" ? "Adding..." : "Add Milestone"}
+              </button>
+              <button type="button" onClick={() => setShowAddForm(false)}
+                className="px-4 py-1.5 text-xs font-semibold text-slate-500">
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button onClick={() => setShowAddForm(true)}
+            className="w-full py-2.5 border border-dashed border-slate-300 rounded-xl text-xs font-semibold text-slate-500 hover:bg-slate-50">
+            + Add Milestone
+          </button>
+        )
+      )}
+    </div>
+  );
+}
+
+// Pilot Results & Evaluation — two-sided submission (see pin_pilot_result_content
+// in schema.sql): the startup can only ever populate outcome/success_metrics/
+// startup_feedback/kpi_actual, government can only populate government_feedback/
+// kpi_target/final_recommendation/validation fields/scale_up_pathway. Whoever
+// writes second must UPSERT since the row is unique per pilot_offer_id.
+const SCALE_UP_PATHWAYS = {
+  within_department: "Scale Within Department",
+  other_districts: "Scale to Other Districts",
+  procurement: "Further Procurement Process",
+  marketplace: "Government Marketplace / Procurement Route",
+  further_pilot: "Further Pilot",
+};
+
 function PilotResultsView({ offerId, isGovernment, onUpdated }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const [startupForm, setStartupForm] = useState({ outcome: "", success_metrics: "", kpi_actual: "" });
+  const [govForm, setGovForm] = useState({
+    government_feedback: "", kpi_target: "", final_recommendation: "scale", scale_up_pathway: "within_department",
+    validator_name: "", validation_summary: "", validation_status: "not_applicable",
+  });
 
   const loadResult = useCallback(async () => {
-    const { data, error: err } = await supabase
+    setLoading(true);
+    const { data } = await supabase
       .from("pilot_results")
       .select("*")
       .eq("pilot_offer_id", offerId)
       .maybeSingle();
-    if (!err) setResult(data);
+    setResult(data);
+    if (data) {
+      setStartupForm({
+        outcome: data.outcome || "", success_metrics: data.success_metrics || "", kpi_actual: data.kpi_actual || "",
+      });
+      setGovForm({
+        government_feedback: data.government_feedback || "",
+        kpi_target: data.kpi_target || "",
+        final_recommendation: data.final_recommendation || "scale",
+        scale_up_pathway: data.scale_up_pathway || "within_department",
+        validator_name: data.validator_name || "",
+        validation_summary: data.validation_summary || "",
+        validation_status: data.validation_status || "not_applicable",
+      });
+    }
     setLoading(false);
   }, [offerId]);
 
-  useEffect(() => {
-    loadResult();
-  }, [loadResult]);
+  useEffect(() => { loadResult(); }, [loadResult]);
 
-  if (loading) {
-    return <Loader2 className="w-5 h-5 animate-spin text-slate-400" />;
-  }
+  const upsert = async (payload) => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("pilot_results")
+        .upsert({ pilot_offer_id: offerId, ...payload }, { onConflict: "pilot_offer_id" });
+      if (!error) {
+        await loadResult();
+        onUpdated?.();
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
 
-  if (!result) {
-    return (
-      <p className="text-xs text-slate-400">
-        Results have not been submitted yet.
-      </p>
-    );
-  }
+  if (loading) return <Loader2 className="w-5 h-5 animate-spin text-slate-400" />;
 
   return (
-    <div className="space-y-3 text-sm">
-      {result.outcome && (
-        <div>
-          <span className="text-xs font-semibold text-slate-500 uppercase">Outcome:</span>
-          <p className="text-slate-700 mt-0.5 whitespace-pre-line">{result.outcome}</p>
-        </div>
-      )}
-      {result.success_metrics && (
-        <div>
-          <span className="text-xs font-semibold text-slate-500 uppercase">Success Metrics:</span>
-          <p className="text-slate-700 mt-0.5 whitespace-pre-line">{result.success_metrics}</p>
-        </div>
-      )}
-      {result.final_recommendation && (
-        <div>
-          <span className="text-xs font-semibold text-slate-500 uppercase">Recommendation:</span>
-          <span className="text-slate-700 ml-2 font-medium">
-            {result.final_recommendation === "scale" ? "Scale" : result.final_recommendation === "extend_pilot" ? "Extend Pilot" : "Close"}
-          </span>
-        </div>
-      )}
+    <div className="space-y-6">
+      {/* Startup submission */}
+      <div>
+        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Startup: Final Results</h4>
+        {!isGovernment ? (
+          <div className="space-y-2">
+            <textarea value={startupForm.outcome} onChange={(e) => setStartupForm({ ...startupForm, outcome: e.target.value })}
+              placeholder="Outcome / implementation summary" rows={2}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none" />
+            <textarea value={startupForm.success_metrics} onChange={(e) => setStartupForm({ ...startupForm, success_metrics: e.target.value })}
+              placeholder="Success metrics / evidence" rows={2}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none" />
+            <input value={startupForm.kpi_actual} onChange={(e) => setStartupForm({ ...startupForm, kpi_actual: e.target.value })}
+              placeholder="Actual KPI result (e.g. 37% reduction)"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none" />
+            <button onClick={() => upsert(startupForm)} disabled={saving}
+              className="px-4 py-2 bg-[#0B192C] text-white text-xs font-semibold rounded-xl disabled:opacity-50">
+              {saving ? "Saving..." : "Submit Final Results"}
+            </button>
+          </div>
+        ) : (
+          <div className="text-sm text-slate-700 space-y-1.5">
+            <p><strong className="text-xs text-slate-500 uppercase">Outcome:</strong> {result?.outcome || "Not submitted yet"}</p>
+            <p><strong className="text-xs text-slate-500 uppercase">Success Metrics:</strong> {result?.success_metrics || "—"}</p>
+            <p><strong className="text-xs text-slate-500 uppercase">Actual KPI:</strong> {result?.kpi_actual || "—"}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Government evaluation */}
+      <div className="pt-4 border-t border-slate-100">
+        <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Government: Evaluation &amp; Decision</h4>
+        {isGovernment ? (
+          <div className="space-y-2">
+            <input value={govForm.kpi_target} onChange={(e) => setGovForm({ ...govForm, kpi_target: e.target.value })}
+              placeholder="KPI target (e.g. 30% reduction in processing time)"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none" />
+            <textarea value={govForm.government_feedback} onChange={(e) => setGovForm({ ...govForm, government_feedback: e.target.value })}
+              placeholder="Government feedback" rows={2}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none" />
+
+            <div className="pt-2">
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Independent Validation (optional)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <input value={govForm.validator_name} onChange={(e) => setGovForm({ ...govForm, validator_name: e.target.value })}
+                  placeholder="Validator name / organization"
+                  className="px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none" />
+                <select value={govForm.validation_status} onChange={(e) => setGovForm({ ...govForm, validation_status: e.target.value })}
+                  className="px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none">
+                  <option value="not_applicable">Not Applicable</option>
+                  <option value="pending">Pending</option>
+                  <option value="verified">Verified</option>
+                </select>
+              </div>
+              <textarea value={govForm.validation_summary} onChange={(e) => setGovForm({ ...govForm, validation_summary: e.target.value })}
+                placeholder="Validation summary" rows={2}
+                className="w-full mt-2 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none" />
+            </div>
+
+            <div className="pt-2">
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Decision</label>
+              <div className="flex gap-2 mb-2">
+                {["scale", "extend_pilot", "close"].map((rec) => (
+                  <button key={rec} type="button" onClick={() => setGovForm({ ...govForm, final_recommendation: rec })}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border ${
+                      govForm.final_recommendation === rec ? "bg-[#0B192C] text-white border-[#0B192C]" : "border-slate-200 text-slate-600"
+                    }`}>
+                    {rec === "scale" ? "Scale" : rec === "extend_pilot" ? "Extend Pilot" : "Close"}
+                  </button>
+                ))}
+              </div>
+              {govForm.final_recommendation === "scale" && (
+                <select value={govForm.scale_up_pathway} onChange={(e) => setGovForm({ ...govForm, scale_up_pathway: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none">
+                  {Object.entries(SCALE_UP_PATHWAYS).map(([val, label]) => (
+                    <option key={val} value={val}>{label}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <button onClick={() => upsert(govForm)} disabled={saving}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl disabled:opacity-50">
+              {saving ? "Saving..." : "Save Evaluation & Decision"}
+            </button>
+          </div>
+        ) : (
+          <div className="text-sm text-slate-700 space-y-1.5">
+            <p><strong className="text-xs text-slate-500 uppercase">Feedback:</strong> {result?.government_feedback || "Pending government review"}</p>
+            {result?.final_recommendation && (
+              <p><strong className="text-xs text-slate-500 uppercase">Decision:</strong>{" "}
+                {result.final_recommendation === "scale" ? `Scale — ${SCALE_UP_PATHWAYS[result.scale_up_pathway] || ""}` :
+                 result.final_recommendation === "extend_pilot" ? "Extend Pilot" : "Close"}
+              </p>
+            )}
+            {result?.validation_status && result.validation_status !== "not_applicable" && (
+              <p><strong className="text-xs text-slate-500 uppercase">Independent Validation:</strong> {result.validator_name} ({result.validation_status})</p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

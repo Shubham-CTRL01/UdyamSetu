@@ -3,11 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import DashboardLayout from "../components/DashboardLayout";
+import NotificationsList from "../components/NotificationsList";
+import { useNotifications, useNotificationPolling } from "../context/NotificationsContext";
 import {
   Landmark, Plus, Rocket, FileText, CheckCircle2, Clock, AlertCircle,
   Users, TrendingUp, X, Trash2, ArrowRight, ShieldCheck, ShieldAlert,
   Loader2, Lock, Globe, Mail, Building2, BrainCircuit, Zap,
-  LayoutDashboard, Send, Target
+  LayoutDashboard, Send, Target, Bell
 } from "lucide-react";
 
 const SECTORS = [
@@ -72,9 +74,100 @@ function AIChip({ appId }) {
   );
 }
 
+const ELIGIBILITY_BADGE = {
+  eligible: "bg-emerald-100 text-emerald-800",
+  needs_review: "bg-amber-100 text-amber-800",
+  not_eligible: "bg-rose-100 text-rose-800",
+};
+
+function CompareApplicantsTable({ applications }) {
+  const [scores, setScores] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const ids = applications.map((a) => a.id);
+      if (ids.length === 0) { setLoading(false); return; }
+      const { data } = await supabase
+        .from("ai_match_scores")
+        .select("*")
+        .in("application_id", ids);
+      if (!cancelled) {
+        const byId = {};
+        (data || []).forEach((s) => { byId[s.application_id] = s; });
+        setScores(byId);
+        setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [applications]);
+
+  if (loading) {
+    return <div className="p-8 text-center text-slate-400 text-sm"><Loader2 className="w-5 h-5 animate-spin mx-auto" /></div>;
+  }
+
+  const cols = [
+    { key: "overall_score", label: "Match" },
+    { key: "problem_fit", label: "Problem Fit" },
+    { key: "technical_fit", label: "Technical" },
+    { key: "impact_score", label: "Impact" },
+    { key: "feasibility_score", label: "Feasibility" },
+    { key: "budget_fit", label: "Budget" },
+    { key: "timeline_score", label: "Timeline" },
+    { key: "capability_score", label: "Capability" },
+  ];
+
+  return (
+    <div className="overflow-x-auto -mx-2">
+      <table className="w-full text-xs border-collapse min-w-[640px]">
+        <thead>
+          <tr className="border-b border-slate-200 text-slate-500 uppercase text-[10px] tracking-wider">
+            <th className="text-left py-2 px-2">Startup</th>
+            <th className="text-left py-2 px-2">Eligibility</th>
+            {cols.map((c) => <th key={c.key} className="text-center py-2 px-2">{c.label}</th>)}
+            <th className="text-left py-2 px-2">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {applications.map((app) => {
+            const s = scores[app.id];
+            return (
+              <tr key={app.id} className="border-b border-slate-100 hover:bg-slate-50">
+                <td className="py-2.5 px-2 font-semibold text-slate-800 whitespace-nowrap">{app.startup_name}</td>
+                <td className="py-2.5 px-2">
+                  {app.eligibility_status ? (
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ELIGIBILITY_BADGE[app.eligibility_status] || "bg-slate-100 text-slate-600"}`}>
+                      {app.eligibility_status.replace("_", " ")}
+                    </span>
+                  ) : "—"}
+                </td>
+                {cols.map((c) => (
+                  <td key={c.key} className="text-center py-2.5 px-2 font-semibold text-slate-700">
+                    {s ? `${s[c.key] ?? "—"}%` : "—"}
+                  </td>
+                ))}
+                <td className="py-2.5 px-2 text-slate-500 whitespace-nowrap">{app.status}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {Object.keys(scores).length < applications.length && (
+        <p className="text-[11px] text-slate-400 mt-3">
+          Applicants without a score yet haven't had AI analysis run — open their application to generate it.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function GovernmentDashboard() {
   const { user, profile, verifyCurrentAccount } = useAuth();
   const navigate = useNavigate();
+  const { unreadCount } = useNotifications();
+  useNotificationPolling(user?.id);
 
   const [activeSection, setActiveSection] = useState("dashboard");
   const [challenges, setChallenges] = useState([]);
@@ -85,6 +178,8 @@ export default function GovernmentDashboard() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showPendingHelpModal, setShowPendingHelpModal] = useState(false);
   const [selectedChallengeForApps, setSelectedChallengeForApps] = useState(null);
+  const [compareMode, setCompareMode] = useState(false);
+  useEffect(() => { setCompareMode(false); }, [selectedChallengeForApps]);
   const [selectedApplication, setSelectedApplication] = useState(null);
 
   // Form State
@@ -282,6 +377,7 @@ export default function GovernmentDashboard() {
     { id: "challenges",  label: "Proposed Challenges",  icon: FileText,         badge: totalChallenges || undefined },
     { id: "applications",label: "Applications",         icon: Send,             badge: totalAppsCount || undefined },
     { id: "pilots",      label: "Pilots",               icon: Target,           badge: undefined },
+    { id: "notifications", label: "Notifications",      icon: Bell,             badge: unreadCount || undefined },
   ];
 
   return (
@@ -338,16 +434,18 @@ export default function GovernmentDashboard() {
                   <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 uppercase">Pending</span>
                 </div>
                 <p className="text-xs text-slate-600 mt-0.5">
-                  Challenge publishing is restricted until verified by portal administrators.
+                  Challenge publishing is restricted until the UdyamSetu team verifies your department.
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => verifyCurrentAccount()}
-              className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-xs transition-colors shadow-sm shrink-0"
-            >
-              <Zap className="w-3.5 h-3.5 text-amber-400" /> Instant Verify (Demo Mode)
-            </button>
+            {user?.id?.startsWith("demo-") && (
+              <button
+                onClick={() => verifyCurrentAccount()}
+                className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-xs transition-colors shadow-sm shrink-0"
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-400" /> Instant Verify (Demo Mode)
+              </button>
+            )}
           </div>
         )}
 
@@ -609,6 +707,16 @@ export default function GovernmentDashboard() {
           </div>
         )}
 
+        {activeSection === "notifications" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-extrabold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Notifications</h2>
+              <p className="text-sm text-slate-500 mt-1">Updates on applications, pilots, and milestones for your department.</p>
+            </div>
+            <NotificationsList />
+          </div>
+        )}
+
       </div>
 
       {/* CREATE CHALLENGE MODAL */}
@@ -775,25 +883,41 @@ export default function GovernmentDashboard() {
       {/* APPLICATIONS DRAWER FOR SPECIFIC CHALLENGE */}
       {selectedChallengeForApps && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex justify-end">
-          <div className="bg-white max-w-xl w-full h-full p-6 sm:p-8 overflow-y-auto shadow-2xl flex flex-col justify-between">
+          <div className={`bg-white w-full h-full p-6 sm:p-8 overflow-y-auto shadow-2xl flex flex-col justify-between ${compareMode ? "max-w-4xl" : "max-w-xl"}`}>
             <div>
               <div className="flex items-center justify-between pb-4 border-b border-slate-200 mb-4">
                 <div>
                   <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Challenge Submissions</span>
                   <h3 className="text-xl font-bold text-slate-900">{selectedChallengeForApps.title}</h3>
                 </div>
-                <button
-                  onClick={() => setSelectedChallengeForApps(null)}
-                  className="p-1 rounded-lg text-slate-400 hover:bg-slate-100"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {applications.filter((a) => a.challenge_id === selectedChallengeForApps.id).length > 1 && (
+                    <button
+                      onClick={() => setCompareMode((m) => !m)}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                        compareMode ? "bg-indigo-600 text-white border-indigo-600" : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      {compareMode ? "List View" : "Compare Applicants"}
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedChallengeForApps(null)}
+                    className="p-1 rounded-lg text-slate-400 hover:bg-slate-100"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               {applications.filter((a) => a.challenge_id === selectedChallengeForApps.id).length === 0 ? (
                 <div className="p-8 text-center text-slate-400 text-sm">
                   No startup proposals submitted for this challenge yet.
                 </div>
+              ) : compareMode ? (
+                <CompareApplicantsTable
+                  applications={applications.filter((a) => a.challenge_id === selectedChallengeForApps.id)}
+                />
               ) : (
                 <div className="space-y-4">
                    {applications
@@ -918,35 +1042,37 @@ export default function GovernmentDashboard() {
               Account Verification Required
             </h3>
             <p className="text-xs text-slate-600 leading-relaxed mb-4">
-              To publish grand challenges and invite startup proposals, government department accounts must be verified by UdyamSetu National Administrators.
+              To publish grand challenges and invite startup proposals, government department accounts must be verified by the UdyamSetu team.
             </p>
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 mb-5 text-xs text-amber-900 leading-relaxed space-y-2">
-              <div>
-                <strong>How to Approve in Production:</strong> An admin logs in at <code className="bg-amber-100 px-1 py-0.5 rounded font-mono text-[11px]">/admin/dashboard</code> to verify department jurisdiction.
-              </div>
-              <div className="pt-1 border-t border-amber-200">
-                <strong>For Quick Testing:</strong> You can click the Instant Verify button below to verify this account immediately in demo mode.
-              </div>
+              {user?.id?.startsWith("demo-") ? (
+                <div>
+                  <strong>For Quick Testing:</strong> You can click the Instant Verify button below to verify this account immediately in demo mode.
+                </div>
+              ) : (
+                <div>
+                  <strong>How verification works:</strong> Department credentials are reviewed and verified directly by the UdyamSetu team. You'll be notified once your account is approved.
+                </div>
+              )}
             </div>
             <div className="flex flex-col gap-2">
+              {user?.id?.startsWith("demo-") && (
+                <button
+                  onClick={() => {
+                    verifyCurrentAccount();
+                    setShowPendingHelpModal(false);
+                    setShowCreateModal(true);
+                  }}
+                  className="w-full py-3 bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+                >
+                  <Zap className="w-4 h-4 text-amber-400" /> Instant Verify & Propose Challenge
+                </button>
+              )}
               <button
-                onClick={() => {
-                  verifyCurrentAccount();
-                  setShowPendingHelpModal(false);
-                  setShowCreateModal(true);
-                }}
-                className="w-full py-3 bg-indigo-700 hover:bg-indigo-800 text-white font-bold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
-              >
-                <Zap className="w-4 h-4 text-amber-400" /> Instant Verify & Propose Challenge
-              </button>
-              <button
-                onClick={() => {
-                  setShowPendingHelpModal(false);
-                  navigate("/admin/dashboard");
-                }}
+                onClick={() => setShowPendingHelpModal(false)}
                 className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-xl transition-colors"
               >
-                Go to Portal Admin Dashboard (/admin/dashboard)
+                Got it
               </button>
             </div>
           </div>

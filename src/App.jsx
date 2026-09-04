@@ -11,12 +11,13 @@ const LandingPage            = lazy(() => import("./pages/LandingPage"));
 const LoginPage              = lazy(() => import("./pages/LoginPage"));
 const GovernmentDashboard    = lazy(() => import("./pages/GovernmentDashboard"));
 const StartupDashboard       = lazy(() => import("./pages/StartupDashboard"));
-const AdminDashboard         = lazy(() => import("./pages/AdminDashboard"));
 const BusinessProfile        = lazy(() => import("./pages/BusinessProfile"));
 const Schemes                = lazy(() => import("./pages/Schemes"));
 const Applications           = lazy(() => import("./pages/Applications"));
 const GovApplicationReview   = lazy(() => import("./pages/GovernmentApplicationReview"));
 const PilotManagement        = lazy(() => import("./pages/PilotManagement"));
+const ChallengeDiscovery     = lazy(() => import("./pages/ChallengeDiscovery"));
+const ChallengeDetail        = lazy(() => import("./pages/ChallengeDetail"));
 
 function PageLoader() {
   return (
@@ -33,7 +34,6 @@ function PageLoader() {
 function RoleDashboardRouter() {
   const { role, loading } = useAuth();
   if (loading) return <PageLoader />;
-  if (role === "admin") return <Navigate to="/admin/dashboard" replace />;
   if (role === "government") return <Navigate to="/government/dashboard" replace />;
   return <Navigate to="/startup/dashboard" replace />;
 }
@@ -118,15 +118,6 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/admin/dashboard"
-                  element={
-                    <ProtectedRoute allowedRole="admin">
-                      <AdminDashboard />
-                    </ProtectedRoute>
-                  }
-                />
-
                 {/* Generic /dashboard redirects to user's assigned role dashboard */}
                 <Route
                   path="/dashboard"
@@ -147,6 +138,8 @@ export default function App() {
                   }
                 />
                 <Route path="/schemes" element={<Schemes />} />
+                <Route path="/challenges" element={<ChallengeDiscovery />} />
+                <Route path="/challenges/:challengeId" element={<ChallengeDetail />} />
                 <Route
                   path="/applications"
                   element={

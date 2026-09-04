@@ -3,11 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import DashboardLayout from "../components/DashboardLayout";
+import NotificationsList from "../components/NotificationsList";
+import { useNotifications, useNotificationPolling } from "../context/NotificationsContext";
 import {
-  Rocket, Search, Filter, Clock, ShieldCheck, CheckCircle2,
-  AlertCircle, ArrowRight, Eye, Send, Landmark, Loader2, X,
-  BrainCircuit, TrendingUp, Users, User, Target, Zap, IndianRupee, Calendar,
-  LayoutDashboard, FileText
+  Rocket, Search, Filter, Clock, CheckCircle2,
+  ArrowRight, Eye, Send, Landmark, Loader2, X,
+  BrainCircuit, Target, IndianRupee, Calendar,
+  LayoutDashboard, FileText, Bell
 } from "lucide-react";
 import { pilotStatusColor, pilotStatusLabel, formatCurrency, formatDate } from "../lib/utils";
 import StartupAIMatchViewer from "../components/StartupAIMatchViewer";
@@ -161,6 +163,8 @@ function ApplicationAIMatchCard({ app, onSelect }) {
 export default function StartupDashboard() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const { unreadCount } = useNotifications();
+  useNotificationPolling(user?.id);
 
   const [activeSection, setActiveSection] = useState("dashboard");
   const [challenges, setChallenges] = useState([]);
@@ -174,47 +178,7 @@ export default function StartupDashboard() {
   const [selectedSector, setSelectedSector] = useState("All");
 
   // Modals
-  const [detailModalChallenge, setDetailModalChallenge] = useState(null);
-  const [applyModalChallenge, setApplyModalChallenge] = useState(null);
   const [viewAppModal, setViewAppModal] = useState(null);
-
-  // Application Form
-  const [submitting, setSubmitting] = useState(false);
-  const [appError, setAppError] = useState("");
-  const [appSuccess, setAppSuccess] = useState("");
-  const [appForm, setAppForm] = useState({
-    startup_name: profile?.organization_name || "",
-    contact_person: profile?.full_name || "",
-    startup_sector: profile?.sector || "",
-    startup_description: profile?.description || "",
-    solution_title: "",
-    pitch_summary: "",
-    solution_description: "",
-    problem_solving_approach: "",
-    technology: "",
-    key_features: "",
-    implementation_methodology: "",
-    expected_impact: "",
-    current_maturity: "",
-    existing_deployments: "",
-    team_capabilities: "",
-    timeline: "3 to 6 months",
-    estimated_cost: "₹25 - 50 Lakhs",
-    supporting_docs_url: "",
-  });
-
-  const [businessData, setBusinessData] = useState(null);
-
-  useEffect(() => {
-    if (businessData && !appForm.startup_name) {
-      setAppForm((prev) => ({
-        ...prev,
-        startup_name: businessData.company_name || businessData.name || "",
-        contact_person: businessData.contact_name || businessData.full_name || "",
-        technology: businessData.technology || prev.technology,
-      }));
-    }
-  }, [businessData, appForm.startup_name]);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -236,7 +200,6 @@ export default function StartupDashboard() {
       // against these uuid columns — skip straight to empty/demo state.
       if (user.id.startsWith("demo-")) {
         setApplications([]);
-        setBusinessData(null);
         setPilotOffers([]);
         return;
       }
@@ -250,14 +213,7 @@ export default function StartupDashboard() {
 
       if (aErr) console.warn("Applications error:", aErr.message);
 
-      // 3. Fetch business profile for auto-fill
-      const { data: bizData } = await supabase
-        .from("businesses")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      // 4. Fetch pilot offers for this startup
+      // 3. Fetch pilot offers for this startup
       const { data: pilotData, error: pErr } = await supabase
         .from("pilot_offers")
         .select("*, challenges!inner(title, department)")
@@ -267,7 +223,6 @@ export default function StartupDashboard() {
       if (pErr) console.warn("Pilot offers error:", pErr.message);
 
       setApplications(appsData || []);
-      setBusinessData(bizData);
       setPilotOffers(pilotData || []);
     } catch (err) {
       console.warn("Load data error:", err);
@@ -284,94 +239,6 @@ export default function StartupDashboard() {
     }
     loadData();
   }, [user, navigate, loadData]);
-
-  // Handle Application Submit
-  const handleApplySubmit = async (e) => {
-    e.preventDefault();
-    setAppError("");
-    setAppSuccess("");
-
-    if (!appForm.solution_title || !appForm.solution_description) {
-      setAppError("Solution title and detailed description are required.");
-      return;
-    }
-
-    // Demo accounts use human-readable ids, not real uuids, so they can't
-    // write to uuid-keyed tables — say so plainly instead of surfacing a
-    // raw "invalid input syntax for type uuid" database error.
-    if (user.id.startsWith("demo-")) {
-      setAppError("Demo accounts can't submit real applications. Sign up for a real account to apply.");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const payload = {
-        challenge_id: applyModalChallenge.id,
-        startup_id: user.id,
-        startup_name: appForm.startup_name || profile?.organization_name || "Startup Entity",
-        contact_person: appForm.contact_person || profile?.full_name || "Founder",
-        solution_title: appForm.solution_title,
-        solution_description: appForm.solution_description,
-        pitch_summary: appForm.pitch_summary,
-        problem_solving_approach: appForm.problem_solving_approach,
-        technology: appForm.technology,
-        key_features: appForm.key_features,
-        implementation_methodology: appForm.implementation_methodology,
-        expected_impact: appForm.expected_impact,
-        current_maturity: appForm.current_maturity,
-        existing_deployments: appForm.existing_deployments,
-        team_capabilities: appForm.team_capabilities,
-        timeline: appForm.timeline,
-        estimated_cost: appForm.estimated_cost,
-        supporting_docs_url: appForm.supporting_docs_url,
-        status: "Submitted",
-      };
-
-      const { error: insertErr } = await supabase
-        .from("challenge_applications")
-        .insert(payload);
-
-      if (insertErr) {
-        if (insertErr.code === "23505") {
-          setAppError("You have already submitted an application for this challenge.");
-        } else {
-          setAppError(insertErr.message);
-        }
-      } else {
-        setAppSuccess("Application submitted successfully to the department!");
-        setTimeout(() => {
-          setApplyModalChallenge(null);
-          setAppSuccess("");
-          setAppForm({
-            startup_name: profile?.organization_name || "",
-            contact_person: profile?.full_name || "",
-            startup_sector: profile?.sector || "",
-            startup_description: profile?.description || "",
-            solution_title: "",
-            pitch_summary: "",
-            solution_description: "",
-            problem_solving_approach: "",
-            technology: "",
-            key_features: "",
-            implementation_methodology: "",
-            expected_impact: "",
-            current_maturity: "",
-            existing_deployments: "",
-            team_capabilities: "",
-            timeline: "3 to 6 months",
-            estimated_cost: "₹25 - 50 Lakhs",
-            supporting_docs_url: "",
-          });
-        }, 1500);
-        await loadData();
-      }
-    } catch (errObj) {
-      setAppError(errObj.message || "Could not submit application.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   // Filter challenges
   const filteredChallenges = challenges.filter((c) => {
@@ -402,6 +269,7 @@ export default function StartupDashboard() {
     { id: "challenges",  label: "Available Challenges",  icon: FileText,         badge: availableCount || undefined },
     { id: "applications",label: "My Applications",       icon: Send,             badge: appliedCount || undefined },
     { id: "pilots",      label: "Pilots",                icon: Target,           badge: pilotOffers.length || undefined },
+    { id: "notifications", label: "Notifications",       icon: Bell,             badge: unreadCount || undefined },
   ];
 
   return (
@@ -522,11 +390,11 @@ export default function StartupDashboard() {
                           <p className="text-xs text-slate-500 line-clamp-2">{c.problem_statement}</p>
                         </div>
                         <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/50 flex gap-2">
-                          <button onClick={() => setDetailModalChallenge(c)} className="flex-1 py-2 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-100 text-slate-700">View Details</button>
+                          <button onClick={() => navigate(`/challenges/${c.id}`)} className="flex-1 py-2 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-100 text-slate-700">View Details</button>
                           {applied ? (
                             <span className="flex-1 py-2 text-xs font-bold text-center bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5 inline mr-1" />Applied</span>
                           ) : (
-                            <button onClick={() => setApplyModalChallenge(c)} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg bg-[#0B192C] hover:bg-[#1E3E62] text-white">Apply <ArrowRight className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => navigate(`/challenges/${c.id}`)} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg bg-[#0B192C] hover:bg-[#1E3E62] text-white">Apply <ArrowRight className="w-3.5 h-3.5" /></button>
                           )}
                         </div>
                       </div>
@@ -616,399 +484,18 @@ export default function StartupDashboard() {
           </div>
         )}
 
+        {/* ===== NOTIFICATIONS SECTION ===== */}
+        {activeSection === "notifications" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-extrabold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Notifications</h2>
+              <p className="text-sm text-slate-500 mt-1">Updates on your applications and pilot offers.</p>
+            </div>
+            <NotificationsList />
+          </div>
+        )}
+
       </div>
-
-      {detailModalChallenge && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setDetailModalChallenge(null)}
-              className="absolute right-5 top-5 p-1 rounded-lg text-slate-400 hover:bg-slate-100"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider px-2.5 py-0.5 bg-indigo-50 text-indigo-700 rounded-full">
-                {detailModalChallenge.sector}
-              </span>
-              <span className="text-xs text-slate-400">● {detailModalChallenge.department}</span>
-            </div>
-
-            <h2 className="text-2xl font-bold text-slate-900 mb-4" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-              {detailModalChallenge.title}
-            </h2>
-
-            <div className="space-y-4 text-xs text-slate-700">
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-                <h4 className="font-bold text-slate-900 text-sm mb-1.5">Problem Statement:</h4>
-                <p className="leading-relaxed whitespace-pre-line">{detailModalChallenge.problem_statement}</p>
-              </div>
-
-              {detailModalChallenge.description && (
-                <div>
-                  <h4 className="font-bold text-slate-900 text-sm mb-1">Detailed Description:</h4>
-                  <p className="leading-relaxed whitespace-pre-line text-slate-600">{detailModalChallenge.description}</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="block font-bold text-slate-900 mb-1">Expected Outcome:</span>
-                  <span>{detailModalChallenge.expected_outcome || "Functional prototype"}</span>
-                </div>
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <span className="block font-bold text-slate-900 mb-1">Eligibility Criteria:</span>
-                  <span>{detailModalChallenge.eligibility || "DPIIT Startups"}</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 p-3 bg-slate-100/60 rounded-xl">
-                <div>
-                  <span className="text-slate-500 block">Grant / Budget</span>
-                  <strong className="text-slate-900">{detailModalChallenge.budget || "Govt Pilot"}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Deadline</span>
-                  <strong className="text-slate-900">{detailModalChallenge.deadline || "Open"}</strong>
-                </div>
-                <div>
-                  <span className="text-slate-500 block">Scope</span>
-                  <strong className="text-slate-900">{detailModalChallenge.location || "Pan-India"}</strong>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 pt-4 border-t border-slate-200 flex justify-end gap-3">
-              <button
-                onClick={() => setDetailModalChallenge(null)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
-              >
-                Close
-              </button>
-              {!hasApplied(detailModalChallenge.id) && (
-                <button
-                  onClick={() => {
-                    const c = detailModalChallenge;
-                    setDetailModalChallenge(null);
-                    setApplyModalChallenge(c);
-                  }}
-                  className="px-5 py-2 bg-[#0B192C] text-white text-xs font-bold rounded-xl hover:bg-[#1E3E62]"
-                >
-                  Apply Now
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* APPLY FOR CHALLENGE MODAL */}
-      {applyModalChallenge && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setApplyModalChallenge(null)}
-              className="absolute right-5 top-5 p-1 rounded-lg text-slate-400 hover:bg-slate-100"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <span className="text-xs font-bold text-amber-600 uppercase tracking-wider">Proposal Submission</span>
-            <h2 className="text-xl font-bold text-slate-900 mt-1" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-              Apply for Challenge
-            </h2>
-            <p className="text-xs text-slate-500 mb-4">
-              Submitting to: <strong className="text-slate-800">{applyModalChallenge.title}</strong> ({applyModalChallenge.department})
-            </p>
-
-            {appError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{appError}</span>
-              </div>
-            )}
-
-            {appSuccess && (
-              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>{appSuccess}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleApplySubmit} className="space-y-5">
-              {/* Startup Information (auto-retrieved from profile) */}
-              <div className="pb-3 border-b border-slate-100">
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5" /> Startup Information
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Startup Name</label>
-                    <input
-                      type="text"
-                      value={appForm.startup_name}
-                      onChange={(e) => setAppForm({ ...appForm, startup_name: e.target.value })}
-                      required
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-slate-50 text-slate-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Contact Person / Founder</label>
-                    <input
-                      type="text"
-                      value={appForm.contact_person}
-                      onChange={(e) => setAppForm({ ...appForm, contact_person: e.target.value })}
-                      required
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-slate-50 text-slate-500"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Industry / Sector</label>
-                    <input
-                      type="text"
-                      value={appForm.startup_sector}
-                      onChange={(e) => setAppForm({ ...appForm, startup_sector: e.target.value })}
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-slate-50 text-slate-500"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <Link to="/profile" className="text-xs text-amber-600 hover:text-amber-800 font-medium">
-                      Update via Business Profile →
-                    </Link>
-                  </div>
-                </div>
-              </div>
-
-              {/* Proposed Solution */}
-              <div>
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Target className="w-3.5 h-3.5" /> Proposed Solution
-                </h3>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Solution Title <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={appForm.solution_title}
-                      onChange={(e) => setAppForm({ ...appForm, solution_title: e.target.value })}
-                      placeholder="e.g. Edge-AI Vision Module for Automated Defect Detection"
-                      required
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Pitch / Executive Summary</label>
-                    <textarea
-                      value={appForm.pitch_summary}
-                      onChange={(e) => setAppForm({ ...appForm, pitch_summary: e.target.value })}
-                      placeholder="A concise 2-3 sentence summary of your solution and its value proposition."
-                      rows={2}
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10 resize-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Detailed Solution Description <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      value={appForm.solution_description}
-                      onChange={(e) => setAppForm({ ...appForm, solution_description: e.target.value })}
-                      placeholder="Explain your technical architecture, methodology, and how it solves the ministry's bottleneck..."
-                      rows={3}
-                      required
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10 resize-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Problem-Solving Approach</label>
-                    <textarea
-                      value={appForm.problem_solving_approach}
-                      onChange={(e) => setAppForm({ ...appForm, problem_solving_approach: e.target.value })}
-                      placeholder="How does your solution approach and resolve the specific problem outlined?"
-                      rows={2}
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10 resize-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Technical Approach */}
-              <div>
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5" /> Technical Approach
-                </h3>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Technology / Technical Approach</label>
-                    <input
-                      type="text"
-                      value={appForm.technology}
-                      onChange={(e) => setAppForm({ ...appForm, technology: e.target.value })}
-                      placeholder="e.g. Computer Vision, IoT Sensors, Edge computing"
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Key Features</label>
-                    <textarea
-                      value={appForm.key_features}
-                      onChange={(e) => setAppForm({ ...appForm, key_features: e.target.value })}
-                      placeholder="List the key features and differentiators of your solution."
-                      rows={2}
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10 resize-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Implementation Methodology</label>
-                    <textarea
-                      value={appForm.implementation_methodology}
-                      onChange={(e) => setAppForm({ ...appForm, implementation_methodology: e.target.value })}
-                      placeholder="Describe your step-by-step implementation plan."
-                      rows={2}
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10 resize-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Impact & Feasibility */}
-              <div>
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <TrendingUp className="w-3.5 h-3.5" /> Impact &amp; Feasibility
-                </h3>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Expected Impact</label>
-                    <input
-                      type="text"
-                      value={appForm.expected_impact}
-                      onChange={(e) => setAppForm({ ...appForm, expected_impact: e.target.value })}
-                      placeholder="e.g. 40% reduction in downtime, 10x throughput"
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Current Maturity / Stage</label>
-                    <select
-                      value={appForm.current_maturity}
-                      onChange={(e) => setAppForm({ ...appForm, current_maturity: e.target.value })}
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10"
-                    >
-                      <option value="">Select maturity level</option>
-                      <option value="Concept / Ideation">Concept / Ideation</option>
-                      <option value="Proof of Concept">Proof of Concept</option>
-                      <option value="Prototype">Prototype</option>
-                      <option value="TRL-4 / Validation">TRL-4 / Validation</option>
-                      <option value="TRL-5 / Lab Tested">TRL-5 / Lab Tested</option>
-                      <option value="TRL-6 / Prototype Tested">TRL-6 / Prototype Tested</option>
-                      <option value="TRL-7 / Demo">TRL-7 / Demo</option>
-                      <option value="TRL-8 / Actual System">TRL-8 / Actual System</option>
-                      <option value="TRL-9 / Deployed">TRL-9 / Deployed</option>
-                      <option value="Deployed / Production">Deployed / Production</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Capability & Deployments */}
-              <div>
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5" /> Capability &amp; Deployments
-                </h3>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Existing Deployments / Pilots</label>
-                    <textarea
-                      value={appForm.existing_deployments}
-                      onChange={(e) => setAppForm({ ...appForm, existing_deployments: e.target.value })}
-                      placeholder="Describe any existing deployments or pilot experiences."
-                      rows={2}
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10 resize-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Team / Capabilities</label>
-                    <textarea
-                      value={appForm.team_capabilities}
-                      onChange={(e) => setAppForm({ ...appForm, team_capabilities: e.target.value })}
-                      placeholder="Describe your team's relevant experience and capabilities."
-                      rows={2}
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10 resize-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Cost & Timeline */}
-              <div>
-                <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                  <IndianRupee className="w-3.5 h-3.5" /> Cost &amp; Timeline
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Estimated Timeline</label>
-                    <input
-                      type="text"
-                      value={appForm.timeline}
-                      onChange={(e) => setAppForm({ ...appForm, timeline: e.target.value })}
-                      placeholder="e.g. 4 months to MVP"
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">Estimated Cost / Budget</label>
-                    <input
-                      type="text"
-                      value={appForm.estimated_cost}
-                      onChange={(e) => setAppForm({ ...appForm, estimated_cost: e.target.value })}
-                      placeholder="e.g. ₹35 Lakhs"
-                      className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Supporting Documents */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">Supporting Documents (optional)</label>
-                <input
-                  type="url"
-                  value={appForm.supporting_docs_url}
-                  onChange={(e) => setAppForm({ ...appForm, supporting_docs_url: e.target.value })}
-                  placeholder="URL to portfolio, deck, or datasheet"
-                  className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10"
-                />
-              </div>
-
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setApplyModalChallenge(null)}
-                  className="px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold text-xs rounded-xl transition-all shadow-md disabled:opacity-60 flex items-center gap-1.5"
-                >
-                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  {submitting ? "Submitting..." : "Submit Proposal"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* VIEW SUBMITTED APPLICATION DETAILS MODAL */}
       {viewAppModal && (

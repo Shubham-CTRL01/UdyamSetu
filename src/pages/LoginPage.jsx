@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   Lock, Eye, EyeOff, Landmark, Rocket, KeyRound,
-  BadgeCheck, ShieldCheck, RefreshCw, AlertCircle, Loader2, Zap, Shield
+  BadgeCheck, ShieldCheck, RefreshCw, AlertCircle, Loader2, Zap
 } from "lucide-react";
 
 function TrackBadge({ icon: Icon, label, active, onClick, color }) {
@@ -114,11 +114,7 @@ export default function LoginPage() {
   const handleDemoLogin = (demoKey) => {
     const demo = signInDemo(demoKey);
     const destination =
-      demo.profile.role === "admin"
-        ? "/admin/dashboard"
-        : demo.profile.role === "government"
-        ? "/government/dashboard"
-        : "/startup/dashboard";
+      demo.profile.role === "government" ? "/government/dashboard" : "/startup/dashboard";
     navigate(destination);
   };
 
@@ -185,11 +181,7 @@ export default function LoginPage() {
         } else {
           const targetRole = profile?.role || userRole;
           const destination =
-            targetRole === "admin"
-              ? "/admin/dashboard"
-              : targetRole === "government"
-              ? "/government/dashboard"
-              : "/startup/dashboard";
+            targetRole === "government" ? "/government/dashboard" : "/startup/dashboard";
           navigate(destination);
         }
       }
@@ -290,7 +282,7 @@ export default function LoginPage() {
             <p className="text-xs text-slate-600 mb-3.5 leading-relaxed">
               Bypass registration and evaluate the role-based portals instantly with pre-verified credentials:
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => handleDemoLogin("government_verified")}
@@ -306,14 +298,6 @@ export default function LoginPage() {
               >
                 <Rocket className="w-3.5 h-3.5 text-amber-400" />
                 <span>🚀 Startup Innovator</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDemoLogin("admin")}
-                className="flex items-center justify-center gap-2 px-3 py-2.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm hover:shadow-md"
-              >
-                <Shield className="w-3.5 h-3.5 text-purple-300" />
-                <span>🛡️ Portal Admin</span>
               </button>
             </div>
             <div className="mt-2 text-right">

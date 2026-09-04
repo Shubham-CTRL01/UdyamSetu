@@ -31,7 +31,8 @@ function SidebarContent({ pathname, user, profile, role, dashboardLink, lang, se
 
   const navItems = [
     { to: "/", icon: Home, label: "Home" },
-    { to: "/schemes", icon: BookOpen, label: "Challenges & Schemes" },
+    { to: "/challenges", icon: Target, label: "Challenges" },
+    { to: "/schemes", icon: BookOpen, label: "Schemes" },
   ];
 
   const portalItems = user
@@ -152,7 +153,7 @@ export default function Navbar() {
 
   const isAdmin = role === "admin";
   const isGovt = role === "government";
-  const dashboardLink = isAdmin ? "/admin/dashboard" : isGovt ? "/government/dashboard" : "/startup/dashboard";
+  const dashboardLink = isGovt ? "/government/dashboard" : "/startup/dashboard";
 
   const sidebarProps = { pathname, user, profile, role, dashboardLink, lang, setLang, onLogout: handleLogout };
 

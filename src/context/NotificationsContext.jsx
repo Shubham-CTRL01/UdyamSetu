@@ -10,6 +10,14 @@ export function NotificationsProvider({ children }) {
 
   const fetchNotifications = useCallback(async (userId) => {
     if (!userId) return;
+    // Demo accounts use human-readable ids, not real uuids, so filtering by
+    // recipient_id would just 400 against this uuid column.
+    if (userId.startsWith("demo-")) {
+      setNotifications([]);
+      setUnreadCount(0);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const { data, error } = await supabase

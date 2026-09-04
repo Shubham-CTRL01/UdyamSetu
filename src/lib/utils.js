@@ -23,7 +23,7 @@ export function formatCurrency(value) {
 /**
  * Parse an ISO date string and return a formatted locale date.
  */
-export function formatDate(dateStr, opts = { day: "short", month: "short", year: "numeric" }) {
+export function formatDate(dateStr, opts = { day: "numeric", month: "short", year: "numeric" }) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   if (isNaN(d)) return "—";

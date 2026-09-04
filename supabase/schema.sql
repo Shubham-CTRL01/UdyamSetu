@@ -63,6 +63,21 @@ $$;
 
 grant execute on function public.is_admin() to authenticated, anon;
 
+-- True only for connections with no PostgREST/GoTrue JWT context at all —
+-- i.e. a direct Postgres session such as the Supabase SQL Editor or the
+-- Management API's /database/query endpoint. Every request that goes through
+-- the public REST API (anon or authenticated) always carries a JWT with a
+-- 'role' claim, so this can never be spoofed by an app user; it only ever
+-- reflects "someone with the project's own database credentials ran this
+-- directly," which the admin UI has been removed in favour of.
+create or replace function public.is_trusted_direct_access()
+returns boolean
+language sql
+stable
+as $$
+  select auth.role() is null;
+$$;
+
 -- Anti-tampering function & trigger: prevents self-registration privilege escalation
 -- (INSERT) and non-admins modifying their own role/verification_status (UPDATE).
 --
@@ -78,8 +93,8 @@ create or replace function public.handle_profile_security_update()
 returns trigger as $$
 begin
   if tg_op = 'INSERT' then
-    if public.is_admin() then
-      return new; -- admin-initiated inserts (tooling) pass through untouched
+    if public.is_admin() or public.is_trusted_direct_access() then
+      return new; -- admin-initiated or direct-SQL inserts (tooling) pass through untouched
     end if;
     -- Self-registration: role can only be the two self-selectable tracks —
     -- 'admin' is never claimable this way — and verification_status is
@@ -94,8 +109,11 @@ begin
     return new;
   end if;
 
-  -- UPDATE path: non-admins cannot alter role, verification_status, or rejection_reason
-  if not public.is_admin() then
+  -- UPDATE path: non-admins cannot alter role, verification_status, or rejection_reason.
+  -- Direct SQL (SQL Editor / Management API) is trusted since it requires the
+  -- project owner's own credentials — this is how government department
+  -- verification is approved now that there is no admin dashboard UI.
+  if not (public.is_admin() or public.is_trusted_direct_access()) then
     new.role := old.role;
     new.verification_status := old.verification_status;
     new.rejection_reason := old.rejection_reason;
@@ -977,7 +995,7 @@ begin
   end if;
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql security definer set search_path = public;
 
 drop trigger if exists tr_notify_app_status on public.challenge_applications;
 create trigger tr_notify_app_status
@@ -996,7 +1014,7 @@ begin
           'pilot_offer_received', new.id, 'pilot_offer');
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql security definer set search_path = public;
 
 drop trigger if exists tr_notify_pilot_created on public.pilot_offers;
 create trigger tr_notify_pilot_created
@@ -1048,7 +1066,7 @@ begin
   end if;
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql security definer set search_path = public;
 
 drop trigger if exists tr_notify_pilot_status on public.pilot_offers;
 create trigger tr_notify_pilot_status
@@ -1080,7 +1098,7 @@ begin
           'pilot_negotiating', new.id, 'pilot_negotiation');
   return new;
 end;
-$$ language plpgsql;
+$$ language plpgsql security definer set search_path = public;
 
 drop trigger if exists tr_notify_negotiation on public.pilot_negotiations;
 create trigger tr_notify_negotiation
@@ -1103,6 +1121,362 @@ end;
 $$ language plpgsql security definer;
 
 grant execute on function public.create_notification to authenticated, anon;
+
+
+-- ============================================================
+-- 18. PILOT MILESTONES
+-- ============================================================
+create table if not exists public.pilot_milestones (
+  id              uuid primary key default gen_random_uuid(),
+  pilot_offer_id  uuid references public.pilot_offers(id) on delete cascade not null,
+  title           text not null,
+  description     text,
+  due_date        date,
+  deliverable     text,
+  kpi             text,
+  payment_amount  numeric,
+  payment_status  text not null default 'not_due'
+                  check (payment_status in ('not_due','pending','approved','released')),
+  status          text not null default 'pending'
+                  check (status in ('pending','submitted','under_review','approved','rejected')),
+  submitted_result text,
+  created_at      timestamptz default now(),
+  updated_at      timestamptz default now()
+);
+alter table public.pilot_milestones enable row level security;
+
+drop trigger if exists tr_touch_pilot_milestones on public.pilot_milestones;
+create trigger tr_touch_pilot_milestones
+  before update on public.pilot_milestones
+  for each row execute function public.touch_updated_at();
+
+-- Select: both pilot participants
+drop policy if exists "Pilot participants read milestones" on public.pilot_milestones;
+create policy "Pilot participants read milestones" on public.pilot_milestones
+  for select using (
+    exists (
+      select 1 from public.pilot_offers po
+      where po.id = pilot_milestones.pilot_offer_id
+        and (po.government_id = auth.uid() or po.startup_id = auth.uid())
+    )
+  );
+
+-- Insert: government owner only (milestones are proposed by the department)
+drop policy if exists "Govt owner creates milestones" on public.pilot_milestones;
+create policy "Govt owner creates milestones" on public.pilot_milestones
+  for insert with check (
+    exists (
+      select 1 from public.pilot_offers po
+      where po.id = pilot_milestones.pilot_offer_id
+        and po.government_id = auth.uid()
+    )
+  );
+
+-- Update: both participants (columns + status transitions constrained by triggers below)
+drop policy if exists "Pilot participants update milestones" on public.pilot_milestones;
+create policy "Pilot participants update milestones" on public.pilot_milestones
+  for update using (
+    exists (
+      select 1 from public.pilot_offers po
+      where po.id = pilot_milestones.pilot_offer_id
+        and (po.government_id = auth.uid() or po.startup_id = auth.uid())
+    )
+  );
+
+-- Delete: government owner only
+drop policy if exists "Govt owner deletes milestones" on public.pilot_milestones;
+create policy "Govt owner deletes milestones" on public.pilot_milestones
+  for delete using (
+    exists (
+      select 1 from public.pilot_offers po
+      where po.id = pilot_milestones.pilot_offer_id
+        and po.government_id = auth.uid()
+    )
+  );
+
+-- Status transition trigger, mirrors validate_pilot_status_transition() above:
+-- government can move between pending/under_review/approved/rejected but can't
+-- silently reopen a finalized (approved/rejected) milestone; the startup's own
+-- update path may only move pending -> submitted.
+create or replace function public.validate_milestone_status_transition()
+returns trigger as $$
+declare
+  is_govt boolean;
+begin
+  if tg_op = 'INSERT' or public.is_trusted_direct_access() then
+    return new;
+  end if;
+
+  select exists (
+    select 1 from public.pilot_offers po
+    where po.id = new.pilot_offer_id and po.government_id = auth.uid()
+  ) into is_govt;
+
+  if is_govt then
+    if old.status in ('approved','rejected') and new.status is distinct from old.status then
+      raise exception 'Cannot modify a finalized milestone status: %', old.status;
+    end if;
+  else
+    if new.status is distinct from old.status
+       and not (old.status = 'pending' and new.status = 'submitted') then
+      raise exception 'Invalid milestone transition from % to % for startup', old.status, new.status;
+    end if;
+  end if;
+
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists tr_validate_milestone_status on public.pilot_milestones;
+create trigger tr_validate_milestone_status
+  before update on public.pilot_milestones
+  for each row execute function public.validate_milestone_status_transition();
+
+-- Content-pin trigger, mirrors pin_pilot_offer_content() above: the startup's
+-- update path may only ever touch submitted_result/status, nothing else.
+create or replace function public.pin_milestone_content()
+returns trigger as $$
+declare
+  is_govt boolean;
+begin
+  if public.is_trusted_direct_access() then
+    return new;
+  end if;
+
+  select exists (
+    select 1 from public.pilot_offers po
+    where po.id = new.pilot_offer_id and po.government_id = auth.uid()
+  ) into is_govt;
+
+  if not is_govt then
+    new.pilot_offer_id  := old.pilot_offer_id;
+    new.title           := old.title;
+    new.description     := old.description;
+    new.due_date        := old.due_date;
+    new.deliverable     := old.deliverable;
+    new.kpi             := old.kpi;
+    new.payment_amount  := old.payment_amount;
+    new.payment_status  := old.payment_status;
+    new.created_at      := old.created_at;
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists tr_pin_milestone_content on public.pilot_milestones;
+create trigger tr_pin_milestone_content
+  before update on public.pilot_milestones
+  for each row execute function public.pin_milestone_content();
+
+-- Milestone approved -> notify startup
+create or replace function public.notify_on_milestone_status_change()
+returns trigger as $$
+declare
+  startup uuid;
+begin
+  if old.status is distinct from new.status and new.status = 'approved' then
+    select po.startup_id into startup from public.pilot_offers po where po.id = new.pilot_offer_id;
+    insert into public.notifications (recipient_id, message, type, related_id, related_type)
+    values (startup, 'Milestone "' || new.title || '" has been approved.', 'milestone_approved', new.id, 'pilot_milestone');
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists tr_notify_milestone_status on public.pilot_milestones;
+create trigger tr_notify_milestone_status
+  after update on public.pilot_milestones
+  for each row execute function public.notify_on_milestone_status_change();
+
+
+-- ============================================================
+-- 19. PILOT RESULTS — KPI, INDEPENDENT VALIDATION & SCALE-UP FIELDS
+-- ============================================================
+-- Extends the pilot_results table (section 14) with structured KPI
+-- target/actual tracking, an optional independent-validation sub-record, and
+-- the scale-up pathway chosen alongside final_recommendation = 'scale'.
+alter table public.pilot_results
+  add column if not exists kpi_target text,
+  add column if not exists kpi_actual text,
+  add column if not exists achievement_pct numeric,
+  add column if not exists validator_name text,
+  add column if not exists validation_summary text,
+  add column if not exists validation_status text
+    check (validation_status in ('pending','verified','not_applicable')),
+  add column if not exists scale_up_pathway text
+    check (scale_up_pathway in ('within_department','other_districts','procurement','marketplace','further_pilot'));
+
+-- The original design only let the government owner INSERT and only admins
+-- UPDATE (see section 14) — with the admin dashboard removed, nobody could
+-- ever write a result. Pilot completion is naturally two-sided (the startup
+-- submits evidence/outcome, the government adds feedback/recommendation), so
+-- both participants now get insert/update rights, with a column-pin trigger
+-- (mirroring pin_pilot_offer_content/pin_milestone_content above) ensuring
+-- each side can only ever populate their own columns.
+drop policy if exists "Startup can create results" on public.pilot_results;
+create policy "Startup can create results" on public.pilot_results
+  for insert with check (
+    exists (
+      select 1 from public.pilot_offers po
+      where po.id = pilot_results.pilot_offer_id
+        and po.startup_id = auth.uid()
+    )
+  );
+
+drop policy if exists "Participants can update results" on public.pilot_results;
+create policy "Participants can update results" on public.pilot_results
+  for update using (
+    exists (
+      select 1 from public.pilot_offers po
+      where po.id = pilot_results.pilot_offer_id
+        and (po.government_id = auth.uid() or po.startup_id = auth.uid())
+    )
+  );
+
+create or replace function public.pin_pilot_result_content()
+returns trigger as $$
+declare
+  is_govt boolean;
+  is_startup boolean;
+begin
+  if public.is_trusted_direct_access() then
+    return new;
+  end if;
+
+  select
+    exists (select 1 from public.pilot_offers po where po.id = new.pilot_offer_id and po.government_id = auth.uid()),
+    exists (select 1 from public.pilot_offers po where po.id = new.pilot_offer_id and po.startup_id = auth.uid())
+  into is_govt, is_startup;
+
+  if tg_op = 'INSERT' then
+    if is_govt and not is_startup then
+      new.outcome := null;
+      new.success_metrics := null;
+      new.startup_feedback := null;
+      new.kpi_actual := null;
+    elsif is_startup and not is_govt then
+      new.government_feedback := null;
+      new.kpi_target := null;
+      new.final_recommendation := null;
+      new.validation_status := null;
+      new.validator_name := null;
+      new.validation_summary := null;
+      new.scale_up_pathway := null;
+      new.achievement_pct := null;
+    end if;
+    return new;
+  end if;
+
+  -- UPDATE: each side may only ever touch their own columns, never overwrite
+  -- the counterparty's already-submitted content.
+  if is_govt and not is_startup then
+    new.outcome := old.outcome;
+    new.success_metrics := old.success_metrics;
+    new.startup_feedback := old.startup_feedback;
+    new.kpi_actual := old.kpi_actual;
+  elsif is_startup and not is_govt then
+    new.government_feedback := old.government_feedback;
+    new.kpi_target := old.kpi_target;
+    new.final_recommendation := old.final_recommendation;
+    new.validation_status := old.validation_status;
+    new.validator_name := old.validator_name;
+    new.validation_summary := old.validation_summary;
+    new.scale_up_pathway := old.scale_up_pathway;
+    new.achievement_pct := old.achievement_pct;
+  end if;
+  new.pilot_offer_id := old.pilot_offer_id;
+  new.created_at := old.created_at;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists tr_pin_pilot_result_content on public.pilot_results;
+create trigger tr_pin_pilot_result_content
+  before insert or update on public.pilot_results
+  for each row execute function public.pin_pilot_result_content();
+
+
+-- ============================================================
+-- 20. APPLICATION ELIGIBILITY SCREENING
+-- ============================================================
+-- Deterministic, server-computed eligibility verdict — always overwritten by
+-- this trigger regardless of what the client sends (same trust model as
+-- ai_match_scores: the applicant never gets to author their own verdict).
+-- Deliberately minimal per MVP scope: a deadline check and a sector-match
+-- check. This is advisory/decision-support only, same as the AI match score —
+-- it does not block insertion or hide the application from government.
+alter table public.challenge_applications
+  add column if not exists eligibility_status text
+    check (eligibility_status in ('eligible','not_eligible','needs_review')),
+  add column if not exists eligibility_reasons jsonb;
+
+create or replace function public.evaluate_application_eligibility()
+returns trigger as $$
+declare
+  chal_deadline date;
+  chal_sector text;
+  applicant_sector text;
+  reasons jsonb := '[]'::jsonb;
+  verdict text := 'eligible';
+begin
+  select deadline, sector into chal_deadline, chal_sector
+    from public.challenges where id = new.challenge_id;
+  select sector into applicant_sector
+    from public.profiles where id = new.startup_id;
+
+  if chal_deadline is not null and current_date > chal_deadline then
+    verdict := 'not_eligible';
+    reasons := reasons || jsonb_build_object('ok', false, 'label', 'Challenge application deadline has passed');
+  else
+    reasons := reasons || jsonb_build_object('ok', true, 'label', 'Within application deadline');
+  end if;
+
+  if chal_sector is not null and applicant_sector is not null and chal_sector is distinct from applicant_sector then
+    if verdict = 'eligible' then verdict := 'needs_review'; end if;
+    reasons := reasons || jsonb_build_object('ok', false, 'label',
+      'Startup sector (' || applicant_sector || ') differs from the challenge sector (' || chal_sector || ')');
+  else
+    reasons := reasons || jsonb_build_object('ok', true, 'label', 'Sector requirement satisfied');
+  end if;
+
+  new.eligibility_status := verdict;
+  new.eligibility_reasons := reasons;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists tr_evaluate_eligibility on public.challenge_applications;
+create trigger tr_evaluate_eligibility
+  before insert on public.challenge_applications
+  for each row execute function public.evaluate_application_eligibility();
+
+
+-- ============================================================
+-- 21. APPLICATION-SUBMITTED NOTIFICATION
+-- ============================================================
+-- The existing 15a trigger only fires on UPDATE (status changes) — there was
+-- no notification at all when an application is first submitted.
+create or replace function public.notify_on_application_submitted()
+returns trigger as $$
+declare
+  challenge_title text;
+  gov_owner uuid;
+begin
+  select title, created_by into challenge_title, gov_owner
+    from public.challenges where id = new.challenge_id;
+  if gov_owner is not null then
+    insert into public.notifications (recipient_id, message, type, related_id, related_type)
+    values (gov_owner, 'New application received for "' || challenge_title || '" from ' || new.startup_name || '.',
+            'application_submitted', new.id, 'challenge_application');
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer set search_path = public;
+
+drop trigger if exists tr_notify_app_submitted on public.challenge_applications;
+create trigger tr_notify_app_submitted
+  after insert on public.challenge_applications
+  for each row execute function public.notify_on_application_submitted();
 
 
 -- ============================================================
@@ -1136,6 +1510,7 @@ grant select, insert, update, delete on public.pilot_offers          to authenti
 grant select, insert, update, delete on public.pilot_negotiations    to authenticated;
 grant select, insert, update, delete on public.pilot_results         to authenticated;
 grant select, insert, update, delete on public.notifications         to authenticated;
+grant select, insert, update, delete on public.pilot_milestones      to authenticated;
 
 -- All primary keys use gen_random_uuid() defaults (no serial/identity
 -- columns), so no sequence grants are required.
