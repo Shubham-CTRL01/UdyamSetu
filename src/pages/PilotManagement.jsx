@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabase";
 import {
   ArrowLeft, Loader2, AlertTriangle, Rocket, Send, Check, X,
   Calendar, IndianRupee, Users, List, Clipboard, MapPin,
-  FileText, BrainCircuit, TrendingUp, Clock
+  FileText, BrainCircuit, TrendingUp, Clock, Save
 } from "lucide-react";
 import {
   formatCurrency, formatDate, pilotStatusLabel, pilotStatusColor,
@@ -351,23 +351,69 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
   const challenge = offer.challenges;
   const application = offer.applications;
 
-  const handleStatusUpdate = async (newStatus) => {
-    try {
-      const { error } = await supabase
-        .from("pilot_offers")
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq("id", offer.id);
-      if (error) throw error;
-      onUpdated();
-    } catch (err) {
-      console.error("Status update error:", err);
-    }
-  };
+  const [statusUpdating, setStatusUpdating] = useState(false);
+  const [statusNotice, setStatusNotice] = useState(null);
 
   const [offerData, setOfferData] = useState(offer);
   useEffect(() => {
     setOfferData(offer);
   }, [offer]);
+
+  const handleStatusUpdate = async (newStatus) => {
+    setStatusUpdating(true);
+    setStatusNotice(null);
+
+    // Optimistic UI state update
+    setOfferData((prev) => ({ ...prev, status: newStatus, updated_at: new Date().toISOString() }));
+    try {
+      localStorage.setItem(`udyam_pilot_status_${offer.id}`, newStatus);
+    } catch (e) {
+      console.warn("Could not cache pilot status locally:", e);
+    }
+
+    try {
+      if (!String(offer.id).startsWith("demo-")) {
+        const { error } = await supabase
+          .from("pilot_offers")
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq("id", offer.id);
+        if (error) throw error;
+      }
+
+      setStatusNotice({
+        type: "success",
+        message: newStatus === "completed"
+          ? "Pilot successfully marked as Completed!"
+          : newStatus === "cancelled"
+          ? "Pilot deployment has been cancelled."
+          : `Pilot status updated to ${pilotStatusLabel(newStatus)}.`
+      });
+
+      // Send notification to counterpart
+      const recipientId = isGovernment ? offer.startup_id : offer.government_id;
+      if (recipientId && !String(recipientId).startsWith("demo-")) {
+        createNotification(
+          recipientId,
+          newStatus === "completed"
+            ? `Pilot deployment for "${offer.challenges?.title || "challenge"}" has been marked as Completed.`
+            : `Pilot status updated to ${pilotStatusLabel(newStatus)}.`,
+          newStatus === "completed" ? "pilot_completed" : "pilot_status_update",
+          offer.id,
+          "pilot_offer"
+        );
+      }
+
+      onUpdated?.();
+    } catch (err) {
+      console.error("Status update error:", err);
+      setStatusNotice({
+        type: "error",
+        message: `Status update notice: ${err.message || "Failed to update in database"}. (Local preview updated)`
+      });
+    } finally {
+      setStatusUpdating(false);
+    }
+  };
 
   const handleOfferUpdated = () => {
     setOfferData({ ...offer });
@@ -595,28 +641,58 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
         {(offerData.status === "in_progress" || offerData.status === "completed") && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
             <h3 className="text-sm font-bold text-slate-900 mb-3">Pilot Results &amp; Evaluation</h3>
-            <PilotResultsView offerId={offerData.id} isGovernment={isGovernment} onUpdated={onUpdated} />
+            <PilotResultsView offer={offerData} offerId={offerData.id} isGovernment={isGovernment} onUpdated={onUpdated} />
           </div>
         )}
 
         {/* Pilot Controls (government only, when in_progress) */}
         {offerData.status === "in_progress" && isGovernment && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 mb-3">Pilot Deployment Controls</h3>
+            <h3 className="text-sm font-bold text-slate-900 mb-2">Complete Pilot</h3>
+
+            {statusNotice && (
+              <div className={`mb-3 p-3 rounded-xl text-xs flex items-center gap-2 border ${
+                statusNotice.type === "success"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-800 font-semibold"
+                  : "bg-rose-50 border-rose-200 text-rose-800"
+              }`}>
+                {statusNotice.type === "success" ? (
+                  <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{statusNotice.message}</span>
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center gap-3">
               <button
+                type="button"
                 onClick={() => handleStatusUpdate("completed")}
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2 shadow-sm"
+                disabled={statusUpdating}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2 shadow-sm cursor-pointer"
               >
-                <Check className="w-4 h-4" /> Mark Pilot as Completed
+                {statusUpdating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Updating Pilot...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Mark Pilot as Completed</span>
+                  </>
+                )}
               </button>
               <button
+                type="button"
                 onClick={() => {
                   if (window.confirm("Are you sure you want to cancel this pilot deployment?")) {
                     handleStatusUpdate("cancelled");
                   }
                 }}
-                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2 shadow-sm"
+                disabled={statusUpdating}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2 shadow-sm cursor-pointer"
               >
                 <X className="w-4 h-4" /> Cancel Pilot
               </button>
@@ -624,6 +700,28 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
             <p className="text-xs text-slate-400 mt-2">
               Submit pilot results and evaluation above before or after marking complete.
             </p>
+          </div>
+        )}
+
+        {/* Status card: Completed */}
+        {offerData.status === "completed" && (
+          <div className="bg-emerald-50/70 rounded-2xl border border-emerald-200 p-6 shadow-sm">
+            <div className="flex items-start gap-3.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+                <Check className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-emerald-950">Pilot Deployment Completed</h3>
+                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    ● Completed
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
+                  This pilot has reached successful completion. Final results and evaluation decisions recorded above are archived for departmental procurement and scaling.
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -943,10 +1041,12 @@ const SCALE_UP_PATHWAYS = {
   further_pilot: "Further Pilot",
 };
 
-function PilotResultsView({ offerId, isGovernment, onUpdated }) {
+function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(null);
+  const [saveError, setSaveError] = useState(null);
 
   const [startupForm, setStartupForm] = useState({ outcome: "", success_metrics: "", kpi_actual: "" });
   const [govForm, setGovForm] = useState({
@@ -956,25 +1056,67 @@ function PilotResultsView({ offerId, isGovernment, onUpdated }) {
 
   const loadResult = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("pilot_results")
-      .select("*")
-      .eq("pilot_offer_id", offerId)
-      .maybeSingle();
-    setResult(data);
-    if (data) {
-      setStartupForm({
-        outcome: data.outcome || "", success_metrics: data.success_metrics || "", kpi_actual: data.kpi_actual || "",
-      });
-      setGovForm({
-        government_feedback: data.government_feedback || "",
-        kpi_target: data.kpi_target || "",
-        final_recommendation: data.final_recommendation || "scale",
-        scale_up_pathway: data.scale_up_pathway || "within_department",
-        validator_name: data.validator_name || "",
-        validation_summary: data.validation_summary || "",
-        validation_status: data.validation_status || "not_applicable",
-      });
+
+    // 1. Check localStorage for instantaneous local state
+    let cached = null;
+    try {
+      const stored = localStorage.getItem(`udyam_pilot_result_${offerId}`);
+      if (stored) {
+        cached = JSON.parse(stored);
+        setResult(cached);
+        setStartupForm({
+          outcome: cached.outcome || "",
+          success_metrics: cached.success_metrics || "",
+          kpi_actual: cached.kpi_actual || "",
+        });
+        setGovForm({
+          government_feedback: cached.government_feedback || "",
+          kpi_target: cached.kpi_target || "",
+          final_recommendation: cached.final_recommendation || "scale",
+          scale_up_pathway: cached.scale_up_pathway || "within_department",
+          validator_name: cached.validator_name || "",
+          validation_summary: cached.validation_summary || "",
+          validation_status: cached.validation_status || "not_applicable",
+        });
+      }
+    } catch (e) {
+      console.warn("LocalStorage cache read notice:", e);
+    }
+
+    // 2. Query Supabase if not demo offerId
+    if (offerId && !String(offerId).startsWith("demo-")) {
+      try {
+        const { data, error } = await supabase
+          .from("pilot_results")
+          .select("*")
+          .eq("pilot_offer_id", offerId)
+          .maybeSingle();
+
+        if (!error && data) {
+          setResult(data);
+          setStartupForm({
+            outcome: data.outcome || "",
+            success_metrics: data.success_metrics || "",
+            kpi_actual: data.kpi_actual || "",
+          });
+          setGovForm({
+            government_feedback: data.government_feedback || "",
+            kpi_target: data.kpi_target || "",
+            final_recommendation: data.final_recommendation || "scale",
+            scale_up_pathway: data.scale_up_pathway || "within_department",
+            validator_name: data.validator_name || "",
+            validation_summary: data.validation_summary || "",
+            validation_status: data.validation_status || "not_applicable",
+          });
+          try {
+            localStorage.setItem(`udyam_pilot_result_${offerId}`, JSON.stringify(data));
+          } catch (e) {
+            console.warn("LocalStorage cache write notice:", e);
+          }
+        }
+      } catch (err) {
+        console.warn("Load pilot results notice:", err);
+      }
     }
     setLoading(false);
   }, [offerId]);
@@ -983,44 +1125,132 @@ function PilotResultsView({ offerId, isGovernment, onUpdated }) {
 
   const upsert = async (payload) => {
     setSaving(true);
+    setSaveSuccess(null);
+    setSaveError(null);
+
+    // Optimistic local state update
+    const mergedResult = {
+      ...(result || {}),
+      pilot_offer_id: offerId,
+      ...payload,
+      updated_at: new Date().toISOString()
+    };
+    setResult(mergedResult);
     try {
-      const { error } = await supabase
-        .from("pilot_results")
-        .upsert({ pilot_offer_id: offerId, ...payload }, { onConflict: "pilot_offer_id" });
-      if (!error) {
-        await loadResult();
-        onUpdated?.();
+      localStorage.setItem(`udyam_pilot_result_${offerId}`, JSON.stringify(mergedResult));
+    } catch (e) {
+      console.warn("LocalStorage save notice:", e);
+    }
+
+    try {
+      if (offerId && !String(offerId).startsWith("demo-")) {
+        const { data, error } = await supabase
+          .from("pilot_results")
+          .upsert(
+            { pilot_offer_id: offerId, ...payload, updated_at: new Date().toISOString() },
+            { onConflict: "pilot_offer_id" }
+          )
+          .select()
+          .maybeSingle();
+
+        if (error) {
+          console.error("Upsert pilot_results error:", error);
+          setSaveError(`Database notice: ${error.message || "Could not save to database"}. (Local preview saved)`);
+        } else {
+          if (data) setResult(data);
+          setSaveSuccess(isGovernment ? "Evaluation & Decision saved successfully!" : "Final results submitted successfully!");
+        }
+      } else {
+        setSaveSuccess(isGovernment ? "Evaluation & Decision saved successfully!" : "Final results submitted successfully!");
       }
+
+      // Notify counterparty
+      const recipientId = isGovernment ? offer?.startup_id : offer?.government_id;
+      if (recipientId && !String(recipientId).startsWith("demo-")) {
+        createNotification(
+          recipientId,
+          isGovernment
+            ? `Department evaluation & decision saved for pilot "${offer?.challenges?.title || "challenge"}".`
+            : `Startup submitted final pilot results for "${offer?.challenges?.title || "challenge"}".`,
+          isGovernment ? "pilot_evaluated" : "pilot_results_submitted",
+          offerId,
+          "pilot_offer"
+        );
+      }
+
+      onUpdated?.();
+    } catch (err) {
+      console.error("Save error:", err);
+      setSaveError(err.message || "Failed to save evaluation.");
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) return <Loader2 className="w-5 h-5 animate-spin text-slate-400" />;
+  if (loading) return <Loader2 className="w-5 h-5 animate-spin text-slate-400 my-4" />;
 
   return (
     <div className="space-y-6">
+      {/* Success / Error notification alerts */}
+      {saveSuccess && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2">
+          <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{saveSuccess}</span>
+        </div>
+      )}
+      {saveError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+          <span>{saveError}</span>
+        </div>
+      )}
+
       {/* Startup submission */}
       <div>
         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Startup: Final Results</h4>
         {!isGovernment ? (
           <div className="space-y-2">
-            <textarea value={startupForm.outcome} onChange={(e) => setStartupForm({ ...startupForm, outcome: e.target.value })}
-              placeholder="Outcome / implementation summary" rows={2}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none" />
-            <textarea value={startupForm.success_metrics} onChange={(e) => setStartupForm({ ...startupForm, success_metrics: e.target.value })}
-              placeholder="Success metrics / evidence" rows={2}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none" />
-            <input value={startupForm.kpi_actual} onChange={(e) => setStartupForm({ ...startupForm, kpi_actual: e.target.value })}
+            <textarea
+              value={startupForm.outcome}
+              onChange={(e) => setStartupForm({ ...startupForm, outcome: e.target.value })}
+              placeholder="Outcome / implementation summary"
+              rows={2}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none focus:border-indigo-500"
+            />
+            <textarea
+              value={startupForm.success_metrics}
+              onChange={(e) => setStartupForm({ ...startupForm, success_metrics: e.target.value })}
+              placeholder="Success metrics / evidence"
+              rows={2}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none focus:border-indigo-500"
+            />
+            <input
+              value={startupForm.kpi_actual}
+              onChange={(e) => setStartupForm({ ...startupForm, kpi_actual: e.target.value })}
               placeholder="Actual KPI result (e.g. 37% reduction)"
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none" />
-            <button onClick={() => upsert(startupForm)} disabled={saving}
-              className="px-4 py-2 bg-[#0B192C] text-white text-xs font-semibold rounded-xl disabled:opacity-50">
-              {saving ? "Saving..." : "Submit Final Results"}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
+            />
+            <button
+              type="button"
+              onClick={() => upsert(startupForm)}
+              disabled={saving}
+              className="px-4 py-2.5 bg-[#0B192C] hover:bg-[#1E3E62] text-white text-xs font-semibold rounded-xl disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Submitting Results...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Submit Final Results</span>
+                </>
+              )}
             </button>
           </div>
         ) : (
-          <div className="text-sm text-slate-700 space-y-1.5">
+          <div className="text-sm text-slate-700 space-y-1.5 bg-slate-50/60 p-4 rounded-xl border border-slate-100">
             <p><strong className="text-xs text-slate-500 uppercase">Outcome:</strong> {result?.outcome || "Not submitted yet"}</p>
             <p><strong className="text-xs text-slate-500 uppercase">Success Metrics:</strong> {result?.success_metrics || "—"}</p>
             <p><strong className="text-xs text-slate-500 uppercase">Actual KPI:</strong> {result?.kpi_actual || "—"}</p>
@@ -1032,61 +1262,110 @@ function PilotResultsView({ offerId, isGovernment, onUpdated }) {
       <div className="pt-4 border-t border-slate-100">
         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Government: Evaluation &amp; Decision</h4>
         {isGovernment ? (
-          <div className="space-y-2">
-            <input value={govForm.kpi_target} onChange={(e) => setGovForm({ ...govForm, kpi_target: e.target.value })}
+          <div className="space-y-3">
+            <input
+              value={govForm.kpi_target}
+              onChange={(e) => setGovForm({ ...govForm, kpi_target: e.target.value })}
               placeholder="KPI target (e.g. 30% reduction in processing time)"
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none" />
-            <textarea value={govForm.government_feedback} onChange={(e) => setGovForm({ ...govForm, government_feedback: e.target.value })}
-              placeholder="Government feedback" rows={2}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none" />
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500"
+            />
+            <textarea
+              value={govForm.government_feedback}
+              onChange={(e) => setGovForm({ ...govForm, government_feedback: e.target.value })}
+              placeholder="Government feedback"
+              rows={2}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none focus:border-emerald-500"
+            />
 
-            <div className="pt-2">
+            <div className="pt-1">
               <label className="block text-xs font-semibold text-slate-600 mb-1">Independent Validation (optional)</label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input value={govForm.validator_name} onChange={(e) => setGovForm({ ...govForm, validator_name: e.target.value })}
+                <input
+                  value={govForm.validator_name}
+                  onChange={(e) => setGovForm({ ...govForm, validator_name: e.target.value })}
                   placeholder="Validator name / organization"
-                  className="px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none" />
-                <select value={govForm.validation_status} onChange={(e) => setGovForm({ ...govForm, validation_status: e.target.value })}
-                  className="px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none">
+                  className="px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500"
+                />
+                <select
+                  value={govForm.validation_status}
+                  onChange={(e) => setGovForm({ ...govForm, validation_status: e.target.value })}
+                  className="px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-white focus:border-emerald-500"
+                >
                   <option value="not_applicable">Not Applicable</option>
                   <option value="pending">Pending</option>
                   <option value="verified">Verified</option>
                 </select>
               </div>
-              <textarea value={govForm.validation_summary} onChange={(e) => setGovForm({ ...govForm, validation_summary: e.target.value })}
-                placeholder="Validation summary" rows={2}
-                className="w-full mt-2 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none" />
+              <textarea
+                value={govForm.validation_summary}
+                onChange={(e) => setGovForm({ ...govForm, validation_summary: e.target.value })}
+                placeholder="Validation summary"
+                rows={2}
+                className="w-full mt-2 px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none focus:border-emerald-500"
+              />
             </div>
 
-            <div className="pt-2">
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Decision</label>
+            <div className="pt-1">
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Decision</label>
               <div className="flex gap-2 mb-2">
-                {["scale", "extend_pilot", "close"].map((rec) => (
-                  <button key={rec} type="button" onClick={() => setGovForm({ ...govForm, final_recommendation: rec })}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg border ${
-                      govForm.final_recommendation === rec ? "bg-[#0B192C] text-white border-[#0B192C]" : "border-slate-200 text-slate-600"
-                    }`}>
-                    {rec === "scale" ? "Scale" : rec === "extend_pilot" ? "Extend Pilot" : "Close"}
+                {[
+                  { key: "scale", label: "Scale" },
+                  { key: "extend_pilot", label: "Extend Pilot" },
+                  { key: "close", label: "Close" }
+                ].map((rec) => (
+                  <button
+                    key={rec.key}
+                    type="button"
+                    onClick={() => setGovForm({ ...govForm, final_recommendation: rec.key })}
+                    className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
+                      govForm.final_recommendation === rec.key
+                        ? "bg-[#0B192C] text-white border-[#0B192C] shadow-sm"
+                        : "border-slate-200 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {rec.label}
                   </button>
                 ))}
               </div>
               {govForm.final_recommendation === "scale" && (
-                <select value={govForm.scale_up_pathway} onChange={(e) => setGovForm({ ...govForm, scale_up_pathway: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none">
-                  {Object.entries(SCALE_UP_PATHWAYS).map(([val, label]) => (
-                    <option key={val} value={val}>{label}</option>
-                  ))}
-                </select>
+                <div className="mt-2">
+                  <label className="block text-[11px] font-medium text-slate-500 mb-1">Scale-Up Pathway</label>
+                  <select
+                    value={govForm.scale_up_pathway}
+                    onChange={(e) => setGovForm({ ...govForm, scale_up_pathway: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-white focus:border-emerald-500"
+                  >
+                    {Object.entries(SCALE_UP_PATHWAYS).map(([val, label]) => (
+                      <option key={val} value={val}>{label}</option>
+                    ))}
+                  </select>
+                </div>
               )}
             </div>
 
-            <button onClick={() => upsert(govForm)} disabled={saving}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl disabled:opacity-50">
-              {saving ? "Saving..." : "Save Evaluation & Decision"}
-            </button>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => upsert(govForm)}
+                disabled={saving}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving Evaluation...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>Save Evaluation &amp; Decision</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="text-sm text-slate-700 space-y-1.5">
+          <div className="text-sm text-slate-700 space-y-1.5 bg-slate-50/60 p-4 rounded-xl border border-slate-100">
             <p><strong className="text-xs text-slate-500 uppercase">Feedback:</strong> {result?.government_feedback || "Pending government review"}</p>
             {result?.final_recommendation && (
               <p><strong className="text-xs text-slate-500 uppercase">Decision:</strong>{" "}

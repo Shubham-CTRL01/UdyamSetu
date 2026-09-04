@@ -130,9 +130,7 @@ function SidebarContent({ profile, user, role, verificationStatus, navItems, act
     <aside className="flex flex-col h-full bg-white border-r border-slate-200 w-64 overflow-y-auto">
       {/* Brand */}
       <Link to="/" className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 hover:bg-slate-50/60 transition-colors shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-[#0B192C] flex items-center justify-center shrink-0">
-          <span className="text-amber-400 font-extrabold text-sm">U</span>
-        </div>
+        <img src="/logo.png" alt="UdyamSetu Logo" className="w-8 h-8 rounded-lg object-contain shadow-xs border border-slate-100 shrink-0" />
         <div>
           <div className="font-extrabold text-[13px] text-[#0B192C] tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
             UdyamSetu
@@ -335,9 +333,7 @@ export default function DashboardLayout({ children, activeSection, onSectionChan
             <Menu className="w-5 h-5 text-slate-700" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-[#0B192C] flex items-center justify-center">
-              <span className="text-amber-400 font-extrabold text-xs">U</span>
-            </div>
+            <img src="/logo.png" alt="UdyamSetu Logo" className="w-6 h-6 rounded-md object-contain shadow-xs border border-slate-100" />
             <span className="font-bold text-sm text-[#0B192C]" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
               UdyamSetu
             </span>

@@ -206,9 +206,18 @@ export default function LoginPage() {
           </svg>
         </div>
         <div className="relative z-10">
-          <Link to="/" className="inline-flex items-center gap-2 text-slate-300 hover:text-white text-xs font-medium mb-6 transition-colors">
+          <Link to="/" className="inline-flex items-center gap-2 text-slate-300 hover:text-white text-xs font-medium mb-4 transition-colors">
             ← Back to Home
           </Link>
+          <div className="flex items-center gap-3 mb-4">
+            <img src="/logo.png" alt="UdyamSetu" className="w-11 h-11 rounded-xl bg-white p-1 object-contain shadow-md" />
+            <div>
+              <span className="text-white font-extrabold text-lg tracking-tight block leading-none" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+                UdyamSetu
+              </span>
+              <span className="text-slate-300 text-[11px] font-medium">उद्यम सेतु</span>
+            </div>
+          </div>
           <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/15 px-3.5 py-1.5 rounded-full">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-[11px] text-slate-200 tracking-widest font-semibold uppercase">Official Sovereign Digital Exchange Gateway</span>

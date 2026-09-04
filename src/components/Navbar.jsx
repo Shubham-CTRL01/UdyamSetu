@@ -39,7 +39,6 @@ function SidebarContent({ pathname, user, profile, role, dashboardLink, lang, se
         { to: dashboardLink, icon: LayoutDashboard, label: "Dashboard" },
         ...(!isAdmin
           ? [
-              { to: "/pilot-management", icon: Target, label: "Pilot Management" },
               { to: "/profile", icon: Settings, label: "Business Profile" },
             ]
           : []),
@@ -50,9 +49,7 @@ function SidebarContent({ pathname, user, profile, role, dashboardLink, lang, se
     <aside className="flex flex-col h-full bg-white border-r border-slate-200 w-64 shrink-0">
       {/* Brand */}
       <Link to="/" onClick={onLinkClick} className="flex items-center gap-2.5 px-5 py-4 border-b border-slate-100 hover:bg-slate-50/60 transition-colors">
-        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-[#0B192C] to-[#1E3E62] flex items-center justify-center shadow-md shrink-0">
-          <Shield className="w-5 h-5 text-amber-400" />
-        </div>
+        <img src="/logo.png" alt="UdyamSetu Logo" className="w-9 h-9 rounded-lg object-contain shadow-sm shrink-0 border border-slate-100" />
         <div>
           <div className="font-extrabold text-[15px] text-[#0B192C] tracking-tight leading-none" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
             UdyamSetu
@@ -172,9 +169,7 @@ export default function Navbar() {
           <Menu className="w-5 h-5" />
         </button>
         <Link to="/" className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-[#0B192C] flex items-center justify-center">
-            <Shield className="w-4 h-4 text-amber-400" />
-          </div>
+          <img src="/logo.png" alt="UdyamSetu Logo" className="w-7 h-7 rounded-md object-contain shadow-xs border border-slate-100" />
           <span className="font-bold text-sm text-[#0B192C]" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
             UdyamSetu
           </span>
