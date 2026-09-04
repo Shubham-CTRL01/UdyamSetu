@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import DashboardLayout from "../components/DashboardLayout";
@@ -166,7 +166,16 @@ export default function StartupDashboard() {
   const { unreadCount } = useNotifications();
   useNotificationPolling(user?.id);
 
-  const [activeSection, setActiveSection] = useState("dashboard");
+  const location = useLocation();
+  const [activeSection, setActiveSection] = useState(
+    location.state?.section || "dashboard"
+  );
+
+  useEffect(() => {
+    if (location.state?.section) {
+      setActiveSection(location.state.section);
+    }
+  }, [location.state]);
   const [challenges, setChallenges] = useState([]);
 
   const [applications, setApplications] = useState([]);
@@ -265,11 +274,11 @@ export default function StartupDashboard() {
   const founderName = profile?.full_name || user?.email?.split("@")[0];
 
   const STARTUP_NAV = [
-    { id: "dashboard",   label: "Dashboard",            icon: LayoutDashboard, badge: undefined },
-    { id: "challenges",  label: "Available Challenges",  icon: FileText,         badge: availableCount || undefined },
-    { id: "applications",label: "My Applications",       icon: Send,             badge: appliedCount || undefined },
-    { id: "pilots",      label: "Pilots",                icon: Target,           badge: pilotOffers.length || undefined },
-    { id: "notifications", label: "Notifications",       icon: Bell,             badge: unreadCount || undefined },
+    { id: "dashboard",      label: "Dashboard",             icon: LayoutDashboard, badge: undefined },
+    { id: "challenges",     label: "Available Challenges",   icon: FileText,         badge: availableCount || undefined },
+    { id: "applications",   label: "My Applications",        icon: Send,             badge: appliedCount || undefined },
+    { id: "pilots",         label: "Pilot Offers",           icon: Target,           badge: pilotOffers.length || undefined },
+    { id: "notifications",  label: "Notifications",          icon: Bell,             badge: unreadCount || undefined },
   ];
 
   return (
@@ -319,31 +328,6 @@ export default function StartupDashboard() {
               </div>
             )}
 
-            {/* Recent Pilot Offers Summary */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-base font-bold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Recent Pilot Offers</h2>
-                <button onClick={() => setActiveSection("pilots")} className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 hover:text-amber-800">View All <ArrowRight className="w-3.5 h-3.5" /></button>
-              </div>
-              {pilotOffers.length === 0 ? (
-                <div className="p-6 text-center text-slate-400 text-xs bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                  No pilot offers yet. They appear here when government departments select your solution.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {pilotOffers.slice(0, 3).map((offer) => (
-                    <div key={offer.id} onClick={() => navigate(`/pilot-management/${offer.id}`)}
-                      className="cursor-pointer flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 transition-all">
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold text-sm text-slate-900 truncate">{offer.objective || "Pilot Offer"}</div>
-                        <div className="text-xs text-slate-400 truncate">{offer.challenges?.title}</div>
-                      </div>
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ml-3 ${pilotStatusColor(offer.status)}`}>{pilotStatusLabel(offer.status)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
         )}
 
@@ -447,40 +431,94 @@ export default function StartupDashboard() {
           </div>
         )}
 
-        {/* ===== PILOTS SECTION ===== */}
+        {/* ===== PILOT OFFERS SECTION ===== */}
         {activeSection === "pilots" && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-extrabold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Pilot Opportunities</h2>
-              <p className="text-sm text-slate-500 mt-1">Pilot offers and negotiations from government departments.</p>
+              <h2 className="text-2xl font-extrabold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Pilot Offers</h2>
+              <p className="text-sm text-slate-500 mt-1">
+                Active pilot offers from government departments. Click a card to view details, accept offers, and track milestones.
+              </p>
             </div>
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-              {pilotOffers.length === 0 ? (
-                <div className="p-12 text-center flex flex-col items-center gap-3">
-                  <Target className="w-8 h-8 text-slate-300" />
-                  <h3 className="font-semibold text-slate-800">No Pilot Offers Yet</h3>
-                  <p className="text-xs text-slate-500 max-w-md">Pilot offers appear here when a government department selects your solution for a pilot deployment.</p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {pilotOffers.map((offer) => (
-                    <div key={offer.id} onClick={() => navigate(`/pilot-management/${offer.id}`)}
-                      className="cursor-pointer p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-md transition-all">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-slate-500 uppercase truncate">{offer.challenges?.title || "Challenge"}</span>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${pilotStatusColor(offer.status)}`}>● {pilotStatusLabel(offer.status)}</span>
+
+            {pilotOffers.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center flex flex-col items-center gap-3">
+                <Target className="w-10 h-10 text-slate-300" />
+                <h3 className="font-semibold text-slate-800">No Pilot Offers Yet</h3>
+                <p className="text-xs text-slate-500 max-w-md">
+                  Pilot offers appear here when a government department selects your solution for a pilot deployment.
+                  Keep submitting strong proposals to improve your chances.
+                </p>
+                <button
+                  onClick={() => setActiveSection("challenges")}
+                  className="mt-2 flex items-center gap-2 px-4 py-2 bg-[#0B192C] text-white rounded-xl text-xs font-semibold"
+                >
+                  Browse Challenges <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {pilotOffers.map((offer) => (
+                  <div
+                    key={offer.id}
+                    className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col overflow-hidden"
+                  >
+                    {/* Card header */}
+                    <div className="p-5 flex-1">
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider line-clamp-1 flex-1">
+                          {offer.challenges?.department || "Government Department"}
+                        </span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${pilotStatusColor(offer.status)}`}>
+                          ● {pilotStatusLabel(offer.status)}
+                        </span>
                       </div>
-                      <h3 className="font-bold text-sm text-slate-900 mb-2 line-clamp-1">{offer.objective || "Pilot Offer"}</h3>
-                      <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
-                        <div className="flex items-center gap-1"><IndianRupee className="w-3 h-3" />{formatCurrency(offer.proposed_budget) || "—"}</div>
-                        <div className="flex items-center gap-1"><Calendar className="w-3 h-3" />{offer.duration ? `${offer.duration}d` : "—"}</div>
+
+                      <h3 className="font-bold text-slate-900 text-sm leading-snug mb-1 line-clamp-2" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+                        {offer.objective || "Pilot Offer"}
+                      </h3>
+                      <p className="text-xs text-slate-500 line-clamp-1 mb-3">
+                        For: <strong className="text-slate-700">{offer.challenges?.title || "—"}</strong>
+                      </p>
+
+                      {/* Key metrics */}
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="p-2 bg-slate-50 rounded-lg border border-slate-100">
+                          <span className="text-[10px] text-slate-400 block">Budget</span>
+                          <span className="text-xs font-bold text-slate-800 flex items-center gap-0.5">
+                            <IndianRupee className="w-3 h-3" />{formatCurrency(offer.proposed_budget) || "—"}
+                          </span>
+                        </div>
+                        <div className="p-2 bg-slate-50 rounded-lg border border-slate-100">
+                          <span className="text-[10px] text-slate-400 block">Duration</span>
+                          <span className="text-xs font-bold text-slate-800">
+                            {offer.duration ? `${offer.duration} days` : "—"}
+                          </span>
+                        </div>
+                        {offer.start_date && (
+                          <div className="p-2 bg-slate-50 rounded-lg border border-slate-100 col-span-2">
+                            <span className="text-[10px] text-slate-400 block">Start Date</span>
+                            <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />{formatDate(offer.start_date)}
+                            </span>
+                          </div>
+                        )}
                       </div>
-                      {offer.start_date && <div className="text-xs text-slate-500 mt-1">Starts: {formatDate(offer.start_date)}</div>}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+
+                    {/* Card footer */}
+                    <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/50">
+                      <button
+                        onClick={() => navigate(`/pilot-management/${offer.id}`)}
+                        className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold rounded-xl bg-[#0B192C] hover:bg-[#1E3E62] text-white transition-all"
+                      >
+                        View Full Details <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

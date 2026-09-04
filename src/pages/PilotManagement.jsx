@@ -11,7 +11,6 @@ import {
   formatCurrency, formatDate, pilotStatusLabel, pilotStatusColor,
   applicationStatusColor, createNotification
 } from "../lib/utils";
-import NegotiationWorkspace from "../components/NegotiationWorkspace";
 import AIMatchPanel from "../components/AIMatchPanel";
 import { analyzeApplication } from "../lib/matching";
 
@@ -196,9 +195,12 @@ export default function PilotManagement() {
       return (
         <div className="min-h-screen bg-slate-50 py-12 px-4 text-center">
           <p className="text-slate-500">{error || "Pilot offer not found"}</p>
-          <Link to="/pilot-management" className="text-indigo-600 hover:underline mt-2 inline-block">
+          <button
+            onClick={() => isGovernment ? navigate("/pilot-management") : navigate("/startup/dashboard", { state: { section: "pilots" } })}
+            className="text-indigo-600 hover:underline mt-2 inline-block text-sm"
+          >
             ← Back to Pilot Overview
-          </Link>
+          </button>
         </div>
       );
     }
@@ -379,7 +381,11 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
         <div className="flex items-center gap-4">
           <button
             onClick={() => {
-              navigate("/pilot-management");
+              if (isGovernment) {
+                navigate("/pilot-management");
+              } else {
+                navigate("/startup/dashboard", { state: { section: "pilots" } });
+              }
               onUpdated();
             }}
             className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 font-medium transition-colors"
@@ -480,18 +486,99 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
           </div>
         )}
 
-        {/* Negotiation Workspace */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-          <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <Send className="w-4 h-4 text-slate-600" />
-            Negotiation Workspace
-          </h3>
-          <NegotiationWorkspace
-            pilotOffer={offerData}
-            currentUser={{ id: currentUser?.id, role: profile?.role }}
-            onUpdated={handleOfferUpdated}
-          />
-        </div>
+        {/* Pilot Offer Response / Actions (when proposed) */}
+        {offerData.status === "proposed" && !isGovernment && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+            <h3 className="text-sm font-bold text-slate-900 mb-2">Pilot Offer Decision</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              Review the pilot terms proposed above. Accept the offer to proceed with milestone setup and deployment, or decline.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => handleStatusUpdate("accepted")}
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-all shadow-md hover:shadow-lg"
+              >
+                <Check className="w-4 h-4" /> Accept Offer
+              </button>
+              <button
+                onClick={() => handleStatusUpdate("declined")}
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm rounded-xl transition-all shadow-md hover:shadow-lg"
+              >
+                <X className="w-4 h-4" /> Decline Offer
+              </button>
+            </div>
+          </div>
+        )}
+
+        {offerData.status === "proposed" && isGovernment && (
+          <div className="bg-white rounded-2xl border border-amber-200 p-6 shadow-sm bg-amber-50/40">
+            <div className="flex items-center gap-2 text-amber-800 font-bold text-sm mb-1">
+              <Clock className="w-4 h-4 text-amber-600 animate-pulse" />
+              Awaiting Startup Decision
+            </div>
+            <p className="text-xs text-slate-600">
+              This pilot offer has been sent to {application?.startup_name || "the startup"} and is awaiting their response.
+            </p>
+          </div>
+        )}
+
+        {/* When offer accepted */}
+        {offerData.status === "accepted" && isGovernment && (
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Offer Accepted by Startup</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  {application?.startup_name || "The startup"} has accepted this pilot offer. Set up milestones below and start deployment.
+                </p>
+              </div>
+              <button
+                onClick={() => handleStatusUpdate("in_progress")}
+                className="px-5 py-2.5 bg-[#0B192C] hover:bg-[#1E3E62] text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center gap-2 shrink-0"
+              >
+                <Rocket className="w-4 h-4" /> Start Pilot (In Progress)
+              </button>
+            </div>
+          </div>
+        )}
+
+        {offerData.status === "accepted" && !isGovernment && (
+          <div className="bg-white rounded-2xl border border-emerald-200 p-6 shadow-sm bg-emerald-50/40">
+            <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm mb-1">
+              <Check className="w-4 h-4 text-emerald-600" />
+              Offer Accepted
+            </div>
+            <p className="text-xs text-slate-600">
+              You have accepted this pilot offer. Track milestones below as the government department initiates deployment.
+            </p>
+          </div>
+        )}
+
+        {/* Status notice: Declined */}
+        {offerData.status === "declined" && (
+          <div className="bg-white rounded-2xl border border-rose-200 p-6 shadow-sm bg-rose-50/40">
+            <div className="flex items-center gap-2 text-rose-800 font-bold text-sm mb-1">
+              <X className="w-4 h-4 text-rose-600" />
+              Pilot Offer Declined
+            </div>
+            <p className="text-xs text-slate-600">
+              This pilot offer was declined.
+            </p>
+          </div>
+        )}
+
+        {/* Status notice: Cancelled */}
+        {offerData.status === "cancelled" && (
+          <div className="bg-white rounded-2xl border border-rose-200 p-6 shadow-sm bg-rose-50/40">
+            <div className="flex items-center gap-2 text-rose-800 font-bold text-sm mb-1">
+              <X className="w-4 h-4 text-rose-600" />
+              Pilot Deployment Cancelled
+            </div>
+            <p className="text-xs text-slate-600">
+              This pilot deployment has been cancelled.
+            </p>
+          </div>
+        )}
 
         {/* Milestone Tracker (accepted / in_progress) */}
         {(offerData.status === "accepted" || offerData.status === "in_progress") && (
@@ -512,16 +599,28 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
           </div>
         )}
 
-        {/* Mark complete (government only, when in_progress) */}
+        {/* Pilot Controls (government only, when in_progress) */}
         {offerData.status === "in_progress" && isGovernment && (
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-            <h3 className="text-sm font-bold text-slate-900 mb-3">Complete Pilot</h3>
-            <button
-              onClick={() => handleStatusUpdate("completed")}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2"
-            >
-              <Check className="w-4 h-4" /> Mark Pilot as Completed
-            </button>
+            <h3 className="text-sm font-bold text-slate-900 mb-3">Pilot Deployment Controls</h3>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => handleStatusUpdate("completed")}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2 shadow-sm"
+              >
+                <Check className="w-4 h-4" /> Mark Pilot as Completed
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm("Are you sure you want to cancel this pilot deployment?")) {
+                    handleStatusUpdate("cancelled");
+                  }
+                }}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2 shadow-sm"
+              >
+                <X className="w-4 h-4" /> Cancel Pilot
+              </button>
+            </div>
             <p className="text-xs text-slate-400 mt-2">
               Submit pilot results and evaluation above before or after marking complete.
             </p>

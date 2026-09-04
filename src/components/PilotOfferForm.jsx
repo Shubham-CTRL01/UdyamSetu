@@ -63,7 +63,7 @@ export default function PilotOfferForm({ challenge, application, existingOffer, 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              <MapPin className="w-3.5 h-3.5 inline mr-1" /> Pilot Location
+              <MapPin className="w-3.5 h-3.5 inline mr-1" /> Pilot Location <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -75,7 +75,7 @@ export default function PilotOfferForm({ challenge, application, existingOffer, 
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              <Calendar className="w-3.5 h-3.5 inline mr-1" /> Duration (days)
+              <Calendar className="w-3.5 h-3.5 inline mr-1" /> Duration (days) <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
@@ -90,7 +90,7 @@ export default function PilotOfferForm({ challenge, application, existingOffer, 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              <IndianRupee className="w-3.5 h-3.5 inline mr-1" /> Proposed Budget
+              <IndianRupee className="w-3.5 h-3.5 inline mr-1" /> Proposed Budget <span className="text-red-500">*</span>
             </label>
             <input
               type="number"
@@ -105,7 +105,7 @@ export default function PilotOfferForm({ challenge, application, existingOffer, 
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Start Date
+              Start Date <span className="text-red-500">*</span>
             </label>
             <input
               type="date"
@@ -118,7 +118,7 @@ export default function PilotOfferForm({ challenge, application, existingOffer, 
 
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            <List className="w-3.5 h-3.5 inline mr-1" /> Expected Deliverables
+            <List className="w-3.5 h-3.5 inline mr-1" /> Expected Deliverables <span className="text-red-500">*</span>
           </label>
           <textarea
             value={form.deliverables}
@@ -130,7 +130,7 @@ export default function PilotOfferForm({ challenge, application, existingOffer, 
 
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            <CheckCircle className="w-3.5 h-3.5 inline mr-1" /> Success Criteria
+            <CheckCircle className="w-3.5 h-3.5 inline mr-1" /> Success Criteria <span className="text-red-500">*</span>
           </label>
           <textarea
             value={form.success_criteria}

@@ -155,12 +155,12 @@ export default function ChallengeApplyForm({ challenge, onSuccess, onCancel }) {
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Startup Name</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Startup Name <span className="text-red-500">*</span></label>
               <input type="text" value={form.startup_name} onChange={update("startup_name")} required
                 className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-slate-50 text-slate-500" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Contact Person / Founder</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Contact Person / Founder <span className="text-red-500">*</span></label>
               <input type="text" value={form.contact_person} onChange={update("contact_person")} required
                 className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none bg-slate-50 text-slate-500" />
             </div>
@@ -298,13 +298,13 @@ export default function ChallengeApplyForm({ challenge, onSuccess, onCancel }) {
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Estimated Timeline</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Estimated Timeline <span className="text-red-500">*</span></label>
               <input type="text" value={form.timeline} onChange={update("timeline")}
                 placeholder="e.g. 4 months to MVP"
                 className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">Estimated Cost / Budget</label>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">Estimated Cost / Budget <span className="text-red-500">*</span></label>
               <input type="text" value={form.estimated_cost} onChange={update("estimated_cost")}
                 placeholder="e.g. ₹35 Lakhs"
                 className="w-full px-4 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-[#0B192C] focus:ring-1 focus:ring-[#0B192C]/10" />

@@ -11,6 +11,7 @@ import {
   Loader2, Lock, Globe, Mail, Building2, BrainCircuit, Zap,
   LayoutDashboard, Send, Target, Bell
 } from "lucide-react";
+import { applicationStatusColor } from "../lib/utils";
 
 const SECTORS = [
   "Deep Tech",
@@ -373,11 +374,11 @@ export default function GovernmentDashboard() {
   const officialName = profile?.full_name || user?.email?.split("@")[0];
 
   const GOV_NAV = [
-    { id: "dashboard",   label: "Dashboard",           icon: LayoutDashboard, badge: undefined },
-    { id: "challenges",  label: "Proposed Challenges",  icon: FileText,         badge: totalChallenges || undefined },
-    { id: "applications",label: "Applications",         icon: Send,             badge: totalAppsCount || undefined },
-    { id: "pilots",      label: "Pilots",               icon: Target,           badge: undefined },
-    { id: "notifications", label: "Notifications",      icon: Bell,             badge: unreadCount || undefined },
+    { id: "dashboard",      label: "Dashboard",            icon: LayoutDashboard, badge: undefined },
+    { id: "challenges",     label: "Proposed Challenges",   icon: FileText,         badge: totalChallenges || undefined },
+    { id: "applications",   label: "Applications",          icon: Send,             badge: totalAppsCount || undefined },
+    { id: "pilots",         label: "Pilot Offers",          icon: Target,           badge: undefined },
+    { id: "notifications",  label: "Notifications",         icon: Bell,             badge: unreadCount || undefined },
   ];
 
   return (
@@ -536,7 +537,12 @@ export default function GovernmentDashboard() {
                     <div className="font-semibold text-sm text-slate-900 truncate">{app.startup_name || "Startup"}</div>
                     <div className="text-xs text-slate-400 truncate">{app.solution_title}</div>
                   </div>
-                  <span className="text-xs font-bold text-indigo-600 flex items-center gap-0.5 ml-3">Review <ArrowRight className="w-3 h-3" /></span>
+                  <div className="flex items-center gap-2 ml-3 shrink-0">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${applicationStatusColor(app.status || "Submitted")}`}>
+                      {app.status || "Submitted"}
+                    </span>
+                    <span className="text-xs font-bold text-indigo-600 flex items-center gap-0.5">Review <ArrowRight className="w-3 h-3" /></span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -675,8 +681,10 @@ export default function GovernmentDashboard() {
                         <div className="text-xs text-slate-600 line-clamp-1 mb-2">For: <strong>{app.challenges?.title}</strong></div>
                         <p className="text-xs text-slate-500 line-clamp-2">{app.solution_title}</p>
                       </div>
-                      <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-400">
-                        <span>{new Date(app.created_at).toLocaleDateString()}</span>
+                      <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                        <span className={`font-bold px-2 py-0.5 rounded-full border text-[10px] ${applicationStatusColor(app.status || "Submitted")}`}>
+                          {app.status || "Submitted"}
+                        </span>
                         <span className="font-semibold text-indigo-600 flex items-center gap-0.5">Review <ArrowRight className="w-3 h-3" /></span>
                       </div>
                     </div>
@@ -778,7 +786,7 @@ export default function GovernmentDashboard() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Government Department / Ministry</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Government Department / Ministry <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={form.department}
@@ -788,7 +796,7 @@ export default function GovernmentDashboard() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Target Sector / Domain</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Target Sector / Domain <span className="text-red-500">*</span></label>
                   <select
                     value={form.sector}
                     onChange={(e) => setForm({ ...form, sector: e.target.value })}
@@ -805,7 +813,7 @@ export default function GovernmentDashboard() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Required Solution / Expected Outcome</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Required Solution / Expected Outcome <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={form.expected_outcome}
@@ -815,7 +823,7 @@ export default function GovernmentDashboard() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 mb-1">Eligibility Criteria</label>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Eligibility Criteria <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={form.eligibility}

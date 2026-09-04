@@ -238,16 +238,23 @@ export default function GovernmentApplicationReview() {
     <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Link
-            to="/government/dashboard"
-            className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 font-medium transition-colors"
-          >
-            <ArrowLeft className="w-4 h-4" /> Back to Dashboard
-          </Link>
-          <h1 className="text-xl font-bold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-            Application Review
-          </h1>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-4">
+            <Link
+              to="/government/dashboard"
+              className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 font-medium transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+            </Link>
+            <h1 className="text-xl font-bold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+              Application Review
+            </h1>
+          </div>
+          {application?.status && (
+            <span className={`text-xs font-bold px-3 py-1 rounded-full border w-fit ${applicationStatusColor(application.status)}`}>
+              ● {application.status}
+            </span>
+          )}
         </div>
 
         {error && (
@@ -440,63 +447,164 @@ export default function GovernmentApplicationReview() {
 
             {/* Action buttons for status / pilot */}
             <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
-              <h3 className="text-sm font-bold text-slate-900 mb-4">Review Actions</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-slate-900">Review Actions</h3>
+                {statusLoading && (
+                  <span className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Updating status...
+                  </span>
+                )}
+              </div>
 
-              {application.status !== "Pilot Offered" && application.status !== "Selected" && (
-                <div className="flex flex-wrap gap-2 mb-4">
-                  <button
-                    onClick={() => updateApplicationStatus("Under Review")}
-                    disabled={statusLoading}
-                    className="px-4 py-2 text-xs font-bold rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-700 disabled:opacity-60"
-                  >
-                    Mark for Review
-                  </button>
-                  <button
-                    onClick={() => updateApplicationStatus("Shortlisted")}
-                    disabled={statusLoading}
-                    className="px-4 py-2 text-xs font-bold rounded-lg border border-purple-200 bg-purple-50 text-purple-800 hover:bg-purple-100 disabled:opacity-60"
-                  >
-                    Shortlist
-                  </button>
-                  <button
-                    onClick={() => updateApplicationStatus("Selected")}
-                    disabled={statusLoading}
-                    className="px-4 py-2 text-xs font-bold rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 disabled:opacity-60"
-                  >
-                    Select for Pilot
-                  </button>
-                  <button
-                    onClick={() => updateApplicationStatus("Rejected")}
-                    disabled={statusLoading}
-                    className="px-4 py-2 text-xs font-bold rounded-lg border border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100 disabled:opacity-60"
-                  >
-                    Reject
-                  </button>
+              {/* Decision: Rejected */}
+              {application.status === "Rejected" && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      disabled
+                      className="flex items-center gap-2 px-5 py-3 bg-rose-600 text-white font-bold text-sm rounded-xl shadow-md cursor-default"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      Rejected
+                    </button>
+                    <button
+                      onClick={() => updateApplicationStatus("Under Review")}
+                      disabled={statusLoading}
+                      className="text-xs text-slate-500 hover:text-slate-800 underline font-medium transition-colors"
+                    >
+                      Change decision
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Decision recorded: Application has been rejected.
+                  </p>
                 </div>
               )}
 
+              {/* Decision: Shortlisted */}
+              {application.status === "Shortlisted" && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      disabled
+                      className="flex items-center gap-2 px-5 py-3 bg-purple-600 text-white font-bold text-sm rounded-xl shadow-md cursor-default"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Shortlisted
+                    </button>
+                    <button
+                      onClick={() => setShowPilotForm(true)}
+                      className="flex items-center gap-2 px-5 py-3 bg-[#0B192C] hover:bg-[#1E3E62] text-white font-bold text-sm rounded-xl transition-all shadow-md hover:shadow-lg"
+                    >
+                      <Send className="w-4 h-4" /> Send Pilot
+                    </button>
+                    <button
+                      onClick={() => updateApplicationStatus("Under Review")}
+                      disabled={statusLoading}
+                      className="text-xs text-slate-500 hover:text-slate-800 underline font-medium transition-colors"
+                    >
+                      Change decision
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Decision recorded: Startup is shortlisted for pilot selection.
+                  </p>
+                </div>
+              )}
+
+              {/* Decision: Selected for Pilot (Pending offer details) */}
               {application.status === "Selected" && (
-                <div>
-                  <button
-                    onClick={() => setShowPilotForm(true)}
-                    className="flex items-center gap-2 px-5 py-3 bg-[#0B192C] hover:bg-[#1E3E62] text-white font-bold text-sm rounded-xl transition-all shadow-md hover:shadow-lg mb-3"
-                  >
-                    <Send className="w-4 h-4" /> Offer Pilot
-                  </button>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <button
+                      disabled
+                      className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white font-bold text-sm rounded-xl shadow-md cursor-default"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Selected for Pilot
+                    </button>
+                    <button
+                      onClick={() => setShowPilotForm(true)}
+                      className="flex items-center gap-2 px-5 py-3 bg-[#0B192C] hover:bg-[#1E3E62] text-white font-bold text-sm rounded-xl transition-all shadow-md hover:shadow-lg"
+                    >
+                      <Send className="w-4 h-4" /> Configure &amp; Send Pilot
+                    </button>
+                    <button
+                      onClick={() => updateApplicationStatus("Under Review")}
+                      disabled={statusLoading}
+                      className="text-xs text-slate-500 hover:text-slate-800 underline font-medium transition-colors"
+                    >
+                      Change decision
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Selected for pilot. Click "Configure &amp; Send Pilot" to dispatch the pilot offer.
+                  </p>
                 </div>
               )}
 
+              {/* Decision: Pilot Offered */}
               {application.status === "Pilot Offered" && (
-                <div>
-                  <Link
-                    to="/pilot-management"
-                    className="flex items-center gap-2 px-5 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-bold text-sm rounded-xl transition-all shadow-md hover:shadow-lg w-fit"
-                  >
-                    <Rocket className="w-4 h-4" />
-                    Manage Pilot Offer
-                  </Link>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Link
+                      to="/pilot-management"
+                      className="flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-all shadow-md hover:shadow-lg w-fit"
+                      title="View deployment in Pilot Management"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Pilot Offered
+                    </Link>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Decision recorded: Pilot offer dispatched to startup. Click above to view deployment in Pilot Management.
+                  </p>
                 </div>
               )}
+
+              {/* No final decision yet: Submitted or Under Review */}
+              {application.status !== "Rejected" &&
+                application.status !== "Shortlisted" &&
+                application.status !== "Selected" &&
+                application.status !== "Pilot Offered" && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-slate-500 mb-1">
+                      Take a review decision on this proposal:
+                    </p>
+                    <div className="flex flex-wrap gap-2.5">
+                      <button
+                        onClick={() => setShowPilotForm(true)}
+                        disabled={statusLoading}
+                        className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition-all shadow-md hover:shadow-lg disabled:opacity-60"
+                      >
+                        <Send className="w-3.5 h-3.5" /> Send Pilot
+                      </button>
+                      <button
+                        onClick={() => updateApplicationStatus("Shortlisted")}
+                        disabled={statusLoading}
+                        className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl border border-purple-200 bg-purple-50 text-purple-800 hover:bg-purple-100 transition-all disabled:opacity-60"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" /> Shortlist
+                      </button>
+                      <button
+                        onClick={() => updateApplicationStatus("Rejected")}
+                        disabled={statusLoading}
+                        className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl border border-rose-200 bg-rose-50 text-rose-800 hover:bg-rose-100 transition-all disabled:opacity-60"
+                      >
+                        <XCircle className="w-3.5 h-3.5" /> Reject
+                      </button>
+                      {application.status !== "Under Review" && (
+                        <button
+                          onClick={() => updateApplicationStatus("Under Review")}
+                          disabled={statusLoading}
+                          className="px-4 py-2.5 text-xs font-semibold rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition-all disabled:opacity-60"
+                        >
+                          Mark for Review
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
             </div>
           </div>
 
