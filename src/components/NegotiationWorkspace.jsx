@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Send, MessageCircle, IndianRupee, Calendar, Users,
   AlertCircle, Loader2, Check, X, Clock, User
@@ -46,6 +46,11 @@ export default function NegotiationWorkspace({ pilotOffer, currentUser, onUpdate
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadNegotiations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pilotOffer.id]);
 
   const submitCounterProposal = async (e) => {
     e.preventDefault();

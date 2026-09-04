@@ -85,7 +85,7 @@ export default function PilotManagement() {
           *,
           challenges!inner(title, department, sector, budget),
           applications:challenge_applications!left(solution_title, solution_description, startup_name),
-          startup_profile:profiles!inner(full_name, organization_name, sector, email, website, description)
+          startup_profile:profiles!pilot_offers_startup_id_fkey(full_name, organization_name, sector, email, website, description)
         `);
 
       if (isGovernment) {
@@ -139,7 +139,7 @@ export default function PilotManagement() {
           *,
           challenges!inner(*),
           applications:challenge_applications!left(*),
-          startup_profile:profiles!inner(full_name, organization_name, sector, email, website, description, govt_level)
+          startup_profile:profiles!pilot_offers_startup_id_fkey(full_name, organization_name, sector, email, website, description, govt_level)
         `)
         .eq("id", offerId)
         .single();
@@ -344,35 +344,10 @@ function PilotOfferCard({ offer, isGovernment, onClick }) {
 
 function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
   const navigate = useNavigate();
-  const [negotiations, setNegotiations] = useState([]);
-  const [loadingNegotiations, setLoadingNegotiations] = useState(true);
 
   const isGovernment = profile?.role === "government";
   const challenge = offer.challenges;
   const application = offer.applications;
-
-  const loadNegotiations = useCallback(async () => {
-    setLoadingNegotiations(true);
-    try {
-      const { data, error: err } = await supabase
-        .from("pilot_negotiations")
-        .select(`
-          *,
-          sender:profiles!sender_id(full_name, organization_name, role)
-        `)
-        .eq("pilot_offer_id", offer.id)
-        .order("created_at", { ascending: true });
-
-      if (err) console.warn(err);
-      else setNegotiations(data || []);
-    } finally {
-      setLoadingNegotiations(false);
-    }
-  }, [offer.id]);
-
-  useEffect(() => {
-    loadNegotiations();
-  }, [loadNegotiations]);
 
   const handleStatusUpdate = async (newStatus) => {
     try {
@@ -394,7 +369,6 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
 
   const handleOfferUpdated = () => {
     setOfferData({ ...offer });
-    loadNegotiations();
     onUpdated();
   };
 
