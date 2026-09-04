@@ -116,11 +116,11 @@ export default function LandingPage() {
               </Link>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <Link to="/login" className="flex items-center gap-2 px-6 py-3 bg-amber-400 hover:bg-amber-500 text-[#0B192C] font-bold text-sm rounded-xl transition-colors shadow-lg">
-                <Rocket className="w-4 h-4" /> I'm a Startup / MSME
+              <Link to="/login" className="flex items-center gap-2.5 px-7 py-3.5 bg-amber-400 hover:bg-amber-500 text-[#0B192C] font-bold text-base rounded-xl transition-all shadow-xl hover:shadow-2xl hover:-translate-y-0.5">
+                Sign In / Get Started <ArrowRight className="w-4 h-4" />
               </Link>
-              <Link to="/login" className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 text-white font-semibold text-sm rounded-xl transition-colors">
-                <Building2 className="w-4 h-4" /> I'm from a Ministry / PSU
+              <Link to="/schemes" className="flex items-center gap-2 px-6 py-3.5 bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 text-white font-semibold text-sm rounded-xl transition-colors">
+                Browse Open Challenges
               </Link>
             </div>
           </div>
@@ -144,26 +144,39 @@ export default function LandingPage() {
         <div className="text-center mb-12">
           <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-indigo-600 mb-3"><Zap className="w-3.5 h-3.5" /> Two-Sided National Platform</div>
           <h2 className="font-extrabold text-3xl sm:text-4xl text-slate-900 tracking-tight" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Built for Every Stakeholder</h2>
-          <p className="text-slate-500 text-base mt-3 max-w-xl mx-auto">Whether you're scaling your startup or running a national ministry, UdyamSetu has a dedicated portal for you.</p>
+          <p className="text-slate-500 text-base mt-3 max-w-xl mx-auto">
+            Connecting public sector departments seeking innovative solutions with verified startups ready to scale national impact.
+          </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {ECOSYSTEMS.map((eco) => (
-            <div key={eco.track} className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-lg transition-shadow">
-              <div className={`h-2 bg-gradient-to-r ${eco.color}`} />
-              <div className="p-6">
-                <div className="flex items-center gap-3 mb-5">
-                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${eco.color} flex items-center justify-center`}><eco.icon className="w-5 h-5 text-white" /></div>
-                  <h3 className="font-bold text-lg text-slate-900" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{eco.track}</h3>
+            <div key={eco.track} className="rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-lg transition-shadow flex flex-col justify-between">
+              <div>
+                <div className={`h-2 bg-gradient-to-r ${eco.color}`} />
+                <div className="p-6">
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${eco.color} flex items-center justify-center`}><eco.icon className="w-5 h-5 text-white" /></div>
+                    <div>
+                      <h3 className="font-bold text-lg text-slate-900" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>{eco.track}</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {eco.track === "Startup & MSME"
+                          ? "Discover government challenges and submit your solutions."
+                          : "Post real-world challenges and find innovative solutions from startups."}
+                      </p>
+                    </div>
+                  </div>
+                  <ul className="space-y-2.5 mb-6">
+                    {eco.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2.5 text-sm text-slate-600">
+                        <BadgeCheck className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />{f}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="space-y-2.5 mb-6">
-                  {eco.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2.5 text-sm text-slate-600">
-                      <BadgeCheck className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />{f}
-                    </li>
-                  ))}
-                </ul>
-                <Link to="/login" className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-800 transition-colors">
-                  Access {eco.track} Portal <ChevronRight className="w-4 h-4" />
+              </div>
+              <div className="p-6 pt-0">
+                <Link to="/login" className="w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-semibold rounded-xl border border-slate-200 bg-slate-50 hover:bg-[#0B192C] hover:text-white text-slate-800 transition-all">
+                  Sign In / Get Started <ChevronRight className="w-4 h-4" />
                 </Link>
               </div>
             </div>
