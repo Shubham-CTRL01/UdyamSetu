@@ -24,8 +24,8 @@ export default function Footer() {
           </div>
           <div className="space-y-3">
             <h3 className="text-white font-semibold text-sm uppercase tracking-wider">Platform</h3>
-            {["Grand Challenges", "Schemes & Grants", "GeM Onboarding", "DPIIT Registry"].map((item) => (
-              <Link key={item} to="/schemes" className="block text-sm text-slate-400 hover:text-white transition-colors">{item}</Link>
+            {["Grand Challenges", "GeM Onboarding", "DPIIT Registry"].map((item) => (
+              <Link key={item} to="/challenges" className="block text-sm text-slate-400 hover:text-white transition-colors">{item}</Link>
             ))}
           </div>
           <div className="space-y-3">
@@ -33,7 +33,6 @@ export default function Footer() {
             {[
               { label: "Startup Portal", href: "/login" },
               { label: "MSME Dashboard", href: "/dashboard" },
-              { label: "My Applications", href: "/applications" },
               { label: "Business Profile", href: "/profile" },
             ].map(({ label, href }) => (
               <Link key={label} to={href} className="block text-sm text-slate-400 hover:text-white transition-colors">{label}</Link>

@@ -245,8 +245,8 @@ export default function LandingPage() {
               <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-amber-600 mb-2"><TrendingUp className="w-3.5 h-3.5" /> Featured National Challenges</div>
               <h2 className="font-extrabold text-3xl sm:text-4xl text-slate-900 tracking-tight" style={{fontFamily:"'Plus Jakarta Sans',sans-serif"}}>Live Grand Challenges</h2>
             </div>
-            <Link to="/schemes" className="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">
-              View all 124+ challenges <ArrowRight className="w-4 h-4" />
+            <Link to="/challenges" className="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors whitespace-nowrap">
+              View all challenges <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
           <div className="flex flex-wrap gap-2 mb-8">

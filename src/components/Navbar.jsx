@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   Shield, Menu, X, LogOut, LogIn, Landmark, Rocket, Home,
-  BookOpen, LayoutDashboard, Send, Target, Settings,
+  LayoutDashboard, Target, Settings,
 } from "lucide-react";
 
 function NavLink({ to, icon: Icon, label, active, onClick }) {
@@ -32,7 +32,6 @@ function SidebarContent({ pathname, user, profile, role, dashboardLink, lang, se
   const navItems = [
     { to: "/", icon: Home, label: "Home" },
     { to: "/challenges", icon: Target, label: "Challenges" },
-    { to: "/schemes", icon: BookOpen, label: "Schemes" },
   ];
 
   const portalItems = user
@@ -40,7 +39,6 @@ function SidebarContent({ pathname, user, profile, role, dashboardLink, lang, se
         { to: dashboardLink, icon: LayoutDashboard, label: "Dashboard" },
         ...(!isAdmin
           ? [
-              { to: "/applications", icon: Send, label: "My Applications" },
               { to: "/pilot-management", icon: Target, label: "Pilot Management" },
               { to: "/profile", icon: Settings, label: "Business Profile" },
             ]

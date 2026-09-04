@@ -12,8 +12,6 @@ const LoginPage              = lazy(() => import("./pages/LoginPage"));
 const GovernmentDashboard    = lazy(() => import("./pages/GovernmentDashboard"));
 const StartupDashboard       = lazy(() => import("./pages/StartupDashboard"));
 const BusinessProfile        = lazy(() => import("./pages/BusinessProfile"));
-const Schemes                = lazy(() => import("./pages/Schemes"));
-const Applications           = lazy(() => import("./pages/Applications"));
 const GovApplicationReview   = lazy(() => import("./pages/GovernmentApplicationReview"));
 const PilotManagement        = lazy(() => import("./pages/PilotManagement"));
 const ChallengeDiscovery     = lazy(() => import("./pages/ChallengeDiscovery"));
@@ -137,17 +135,8 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
-                <Route path="/schemes" element={<Schemes />} />
                 <Route path="/challenges" element={<ChallengeDiscovery />} />
                 <Route path="/challenges/:challengeId" element={<ChallengeDetail />} />
-                <Route
-                  path="/applications"
-                  element={
-                    <ProtectedRoute>
-                      <Applications />
-                    </ProtectedRoute>
-                  }
-                />
 
                 {/* Pilot Management (both Government & Startup) */}
                 <Route
