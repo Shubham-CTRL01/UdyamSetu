@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   Lock, Eye, EyeOff, Landmark, Rocket, KeyRound,
-  BadgeCheck, ShieldCheck, RefreshCw, AlertCircle, Loader2
+  BadgeCheck, ShieldCheck, RefreshCw, AlertCircle, Loader2, Zap, Shield
 } from "lucide-react";
 
 function TrackBadge({ icon: Icon, label, active, onClick, color }) {
@@ -86,7 +86,7 @@ const SECTORS = [
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInDemo } = useAuth();
 
   // Mode: "login" or "signup"
   const [mode, setMode] = useState("login");
@@ -110,6 +110,17 @@ export default function LoginPage() {
   const [sector, setSector] = useState("Deep Tech");
   const [description, setDescription] = useState("");
   const [website, setWebsite] = useState("");
+
+  const handleDemoLogin = (demoKey) => {
+    const demo = signInDemo(demoKey);
+    const destination =
+      demo.profile.role === "admin"
+        ? "/admin/dashboard"
+        : demo.profile.role === "government"
+        ? "/government/dashboard"
+        : "/startup/dashboard";
+    navigate(destination);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -270,13 +281,59 @@ export default function LoginPage() {
 
         {/* Form container */}
         <div className="max-w-xl w-full mx-auto my-auto py-8">
+          {/* Quick Demo Access Bar */}
+          <div className="mb-8 p-4 bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-blue-500/10 border border-amber-300/70 rounded-2xl shadow-sm">
+            <div className="flex items-center gap-2 mb-2 text-xs font-bold uppercase tracking-wider text-amber-900">
+              <Zap className="w-4 h-4 text-amber-600 animate-bounce" />
+              <span>⚡ Instant Demo Access (One-Click Evaluation)</span>
+            </div>
+            <p className="text-xs text-slate-600 mb-3.5 leading-relaxed">
+              Bypass registration and evaluate the role-based portals instantly with pre-verified credentials:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => handleDemoLogin("government_verified")}
+                className="flex items-center justify-center gap-2 px-3 py-2.5 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm hover:shadow-md"
+              >
+                <Landmark className="w-3.5 h-3.5 text-amber-400" />
+                <span>🏛️ Govt Dept (Verified)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDemoLogin("startup")}
+                className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#0B192C] hover:bg-[#1E3E62] text-white rounded-xl text-xs font-bold transition-all shadow-sm hover:shadow-md"
+              >
+                <Rocket className="w-3.5 h-3.5 text-amber-400" />
+                <span>🚀 Startup Innovator</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDemoLogin("admin")}
+                className="flex items-center justify-center gap-2 px-3 py-2.5 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm hover:shadow-md"
+              >
+                <Shield className="w-3.5 h-3.5 text-purple-300" />
+                <span>🛡️ Portal Admin</span>
+              </button>
+            </div>
+            <div className="mt-2 text-right">
+              <button
+                type="button"
+                onClick={() => handleDemoLogin("government_pending")}
+                className="text-[11px] font-semibold text-indigo-700 hover:underline inline-flex items-center gap-1"
+              >
+                <span>Test Govt Dept Pending Review Flow →</span>
+              </button>
+            </div>
+          </div>
+
           <div className="mb-6">
             <h2 className="font-bold text-[28px] sm:text-[32px] text-slate-900 tracking-tight leading-snug" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
               {mode === "login" ? "Sign In to UdyamSetu" : "Get Started on UdyamSetu"}
             </h2>
             <p className="text-sm text-slate-500 mt-1.5">
               {mode === "login"
-                ? "Enter your credentials. You will automatically be routed to your department or startup portal."
+                ? "Enter your credentials below, or click any of the 1-click Demo buttons above."
                 : "Select your institutional track to create your official verified profile."}
             </p>
           </div>

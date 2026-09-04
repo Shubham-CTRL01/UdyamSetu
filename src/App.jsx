@@ -38,15 +38,37 @@ function RoleDashboardRouter() {
   return <Navigate to="/startup/dashboard" replace />;
 }
 
-// Layout wrapper — hides Navbar/Footer on login page
+// Layout wrapper — hides the sidebar nav on login page and dashboard pages with their own sidebar layout
 function Layout({ children }) {
   const { pathname } = useLocation();
   const isLogin = pathname === "/login";
+  const isDashboard =
+    pathname.startsWith("/government/dashboard") ||
+    pathname.startsWith("/startup/dashboard") ||
+    pathname.startsWith("/government/challenges/create");
+
+  const showSidebar = !isLogin && !isDashboard;
+
+  if (!showSidebar) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <main className="flex-1">{children}</main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
-      {!isLogin && <Navbar />}
-      <main className="flex-1">{children}</main>
-      {!isLogin && <Footer />}
+      <div className="bg-[#0B192C] text-amber-400 text-[11px] font-semibold tracking-widest uppercase text-center py-2 px-4 hidden sm:block">
+        📢 National Innovation Challenge 2026 — Sovereign GovTech & High-Growth Startup Exchange
+      </div>
+      <div className="flex flex-col lg:flex-row flex-1 min-h-0">
+        <Navbar />
+        <div className="flex-1 flex flex-col min-w-0">
+          <main className="flex-1">{children}</main>
+          <Footer />
+        </div>
+      </div>
     </div>
   );
 }
@@ -124,14 +146,7 @@ export default function App() {
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/schemes"
-                  element={
-                    <ProtectedRoute>
-                      <Schemes />
-                    </ProtectedRoute>
-                  }
-                />
+                <Route path="/schemes" element={<Schemes />} />
                 <Route
                   path="/applications"
                   element={

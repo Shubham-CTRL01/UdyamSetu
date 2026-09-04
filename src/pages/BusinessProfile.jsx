@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
 import { Landmark, Loader2, CheckCircle2, AlertCircle, Save, ArrowLeft, Rocket } from "lucide-react";
 
 const INDIAN_STATES = [
@@ -84,31 +85,45 @@ export default function BusinessProfile() {
           description: profile?.description || "",
         });
       } else {
-        const { data } = await supabase
-          .from("businesses")
-          .select("*")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (data) {
-          setBusinessId(data.id);
+        if (user.id.startsWith("demo-")) {
           setStartupForm({
-            business_name: data.business_name || profile?.organization_name || "",
-            business_type: data.business_type || "Private Limited",
-            category: data.category || profile?.sector || "Deep Tech",
-            state: data.state || "Delhi",
-            district: data.district || "",
-            address: data.address || "",
-            annual_turnover: data.annual_turnover ? String(data.annual_turnover) : "",
-            employee_count: data.employee_count ? String(data.employee_count) : "",
-            website: profile?.website || "",
+            business_name: profile?.organization_name || "ApexVision AI Labs",
+            business_type: "Private Limited",
+            category: profile?.sector || "Deep Tech",
+            state: "Delhi",
+            district: "New Delhi",
+            address: "Plot 42, Technology Park, Okhla Phase III",
+            annual_turnover: "15000000",
+            employee_count: "24",
+            website: profile?.website || "https://apexvision.ai",
           });
         } else {
-          setStartupForm((prev) => ({
-            ...prev,
-            business_name: profile?.organization_name || "",
-            website: profile?.website || "",
-          }));
+          const { data } = await supabase
+            .from("businesses")
+            .select("*")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (data) {
+            setBusinessId(data.id);
+            setStartupForm({
+              business_name: data.business_name || profile?.organization_name || "",
+              business_type: data.business_type || "Private Limited",
+              category: data.category || profile?.sector || "Deep Tech",
+              state: data.state || "Delhi",
+              district: data.district || "",
+              address: data.address || "",
+              annual_turnover: data.annual_turnover ? String(data.annual_turnover) : "",
+              employee_count: data.employee_count ? String(data.employee_count) : "",
+              website: profile?.website || "",
+            });
+          } else {
+            setStartupForm((prev) => ({
+              ...prev,
+              business_name: profile?.organization_name || "",
+              website: profile?.website || "",
+            }));
+          }
         }
       }
     } catch (err) {
@@ -136,20 +151,22 @@ export default function BusinessProfile() {
 
     setSaving(true);
     try {
-      const { error: err } = await supabase
-        .from("profiles")
-        .update({
-          organization_name: govtForm.organization_name,
-          full_name: govtForm.full_name,
-          designation: govtForm.designation,
-          phone: govtForm.phone,
-          description: govtForm.description,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id);
+      if (!user.id.startsWith("demo-")) {
+        const { error: err } = await supabase
+          .from("profiles")
+          .update({
+            organization_name: govtForm.organization_name,
+            full_name: govtForm.full_name,
+            designation: govtForm.designation,
+            phone: govtForm.phone,
+            description: govtForm.description,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", user.id);
 
-      if (err) throw err;
-      await refreshProfile();
+        if (err) throw err;
+        await refreshProfile();
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (errObj) {
@@ -169,41 +186,42 @@ export default function BusinessProfile() {
 
     setSaving(true);
     try {
-      // 1. Update profiles table
-      await supabase
-        .from("profiles")
-        .update({
-          organization_name: startupForm.business_name,
-          sector: startupForm.category,
-          website: startupForm.website,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id);
+      if (!user.id.startsWith("demo-")) {
+        // 1. Update profiles table
+        await supabase
+          .from("profiles")
+          .update({
+            organization_name: startupForm.business_name,
+            sector: startupForm.category,
+            website: startupForm.website,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", user.id);
 
-      // 2. Upsert businesses table
-      const payload = {
-        user_id: user.id,
-        business_name: startupForm.business_name,
-        business_type: startupForm.business_type,
-        category: startupForm.category,
-        state: startupForm.state,
-        district: startupForm.district,
-        address: startupForm.address,
-        annual_turnover: startupForm.annual_turnover ? parseInt(startupForm.annual_turnover) : null,
-        employee_count: startupForm.employee_count ? parseInt(startupForm.employee_count) : null,
-      };
+        // 2. Upsert businesses table
+        const payload = {
+          user_id: user.id,
+          business_name: startupForm.business_name,
+          business_type: startupForm.business_type,
+          category: startupForm.category,
+          state: startupForm.state,
+          district: startupForm.district,
+          address: startupForm.address,
+          annual_turnover: startupForm.annual_turnover ? parseInt(startupForm.annual_turnover) : null,
+          employee_count: startupForm.employee_count ? parseInt(startupForm.employee_count) : null,
+        };
 
-      let res;
-      if (businessId) {
-        res = await supabase.from("businesses").update(payload).eq("id", businessId);
-      } else {
-        res = await supabase.from("businesses").insert(payload).select().single();
-        if (res.data) setBusinessId(res.data.id);
+        let res;
+        if (businessId) {
+          res = await supabase.from("businesses").update(payload).eq("id", businessId);
+        } else {
+          res = await supabase.from("businesses").insert(payload).select().single();
+          if (res.data) setBusinessId(res.data.id);
+        }
+
+        if (res.error) throw res.error;
+        await refreshProfile();
       }
-
-      if (res.error) throw res.error;
-
-      await refreshProfile();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (errObj) {

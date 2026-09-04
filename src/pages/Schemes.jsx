@@ -60,8 +60,65 @@ function SchemeCard({ scheme, onApply, applying }) {
   );
 }
 
+const DEFAULT_SCHEMES = [
+  {
+    id: "scheme-1",
+    name: "Prime Minister's Employment Generation Programme (PMEGP)",
+    category: "Finance",
+    status: "active",
+    description: "Credit-linked subsidy programme to generate self-employment opportunities through micro-enterprises.",
+    benefits: "Subsidy of 15% to 35% on project cost up to ₹50 Lakhs",
+    eligibility: "Individuals above 18 years, SHGs, Institutions registered under Societies Act"
+  },
+  {
+    id: "scheme-2",
+    name: "Credit Guarantee Scheme for Micro & Small Enterprises (CGTMSE)",
+    category: "Finance",
+    status: "active",
+    description: "Collateral-free credit facility up to ₹5 Cr for MSMEs provided by Member Lending Institutions.",
+    benefits: "Guarantee cover up to 85% for collateral-free business loans",
+    eligibility: "New and existing Micro and Small Enterprises"
+  },
+  {
+    id: "scheme-3",
+    name: "Startup India Seed Fund Scheme (SISFS)",
+    category: "Startup",
+    status: "active",
+    description: "Financial assistance to startups for proof of concept, prototype development, product trials, and market entry.",
+    benefits: "Grants up to ₹20 Lakhs and debt funding up to ₹50 Lakhs via incubators",
+    eligibility: "DPIIT-recognized startups incorporated within 2 years"
+  },
+  {
+    id: "scheme-4",
+    name: "Scheme for Promotion of Innovation, Rural Industry & Entrepreneurship (ASPIRE)",
+    category: "Technology",
+    status: "active",
+    description: "Sets up Livelihood Business Incubators (LBI) and Technology Business Incubators (TBI) across rural districts.",
+    benefits: "One-time grant up to ₹1 Cr for plant & machinery",
+    eligibility: "Government and private incubators, MSME institutions"
+  },
+  {
+    id: "scheme-5",
+    name: "Public Procurement Policy for Micro & Small Enterprises (MSMEs)",
+    category: "Procurement",
+    status: "active",
+    description: "Mandatory 25% annual procurement by Central Ministries/PSUs from Micro & Small Enterprises.",
+    benefits: "Free tender sets, exemption from EMD, price preference of L1+15%",
+    eligibility: "Udyam-registered Micro & Small Enterprises"
+  },
+  {
+    id: "scheme-6",
+    name: "ZED Certification Scheme (Zero Defect Zero Effect)",
+    category: "Manufacturing",
+    status: "active",
+    description: "Financial support to MSMEs for ZED rating, quality control systems, and sustainable manufacturing.",
+    benefits: "Up to 80% subsidy on certification cost & ₹5 Lakhs testing assistance",
+    eligibility: "Manufacturing MSMEs with valid Udyam Registration"
+  }
+];
+
 export default function Schemes() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const navigate = useNavigate();
 
   const [schemes, setSchemes] = useState([]);
@@ -73,15 +130,23 @@ export default function Schemes() {
 
   const loadSchemes = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase.from("schemes").select("*").eq("status", "active").order("created_at");
-    setSchemes(data || []);
-    setLoading(false);
+    try {
+      const { data } = await supabase.from("schemes").select("*").eq("status", "active").order("created_at");
+      if (data && data.length > 0) {
+        setSchemes(data);
+      } else {
+        setSchemes(DEFAULT_SCHEMES);
+      }
+    } catch {
+      setSchemes(DEFAULT_SCHEMES);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (!user) { navigate("/login"); return; }
     loadSchemes();
-  }, [user, navigate, loadSchemes]);
+  }, [loadSchemes]);
 
   function showToast(type, message) {
     setToast({ type, message });
@@ -89,7 +154,11 @@ export default function Schemes() {
   }
 
   async function handleApply(scheme) {
-    if (!user) { navigate("/login"); return; }
+    if (!user) {
+      showToast("error", "Please sign in to submit your official application for this government scheme.");
+      setTimeout(() => navigate("/login"), 1500);
+      return;
+    }
     setApplying(scheme.id);
 
     // Check business profile
@@ -134,6 +203,12 @@ export default function Schemes() {
     setApplying(null);
   }
 
+  const backLink = user
+    ? role === "government"
+      ? "/government/dashboard"
+      : "/startup/dashboard"
+    : "/";
+
   const filtered = schemes.filter((s) => {
     const matchCat = category === "All" || s.category === category;
     const matchSearch = !search || s.name.toLowerCase().includes(search.toLowerCase()) || s.description?.toLowerCase().includes(search.toLowerCase());
@@ -153,8 +228,8 @@ export default function Schemes() {
       )}
 
       <div className="max-w-6xl mx-auto">
-        <Link to="/dashboard" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 font-medium mb-6 transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+        <Link to={backLink} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 font-medium mb-6 transition-colors">
+          <ArrowLeft className="w-4 h-4" /> Back to {user ? "Dashboard" : "Home"}
         </Link>
 
         <div className="mb-8">

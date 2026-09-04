@@ -2,13 +2,57 @@ import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
+import DashboardLayout from "../components/DashboardLayout";
 import {
   Rocket, Search, Filter, Clock, ShieldCheck, CheckCircle2,
   AlertCircle, ArrowRight, Eye, Send, Landmark, Loader2, X,
-  BrainCircuit, TrendingUp, Users, User, Target, Zap, IndianRupee, Calendar
+  BrainCircuit, TrendingUp, Users, User, Target, Zap, IndianRupee, Calendar,
+  LayoutDashboard, FileText
 } from "lucide-react";
-import { pilotStatusColor, pilotStatusLabel, formatCurrency } from "../lib/utils";
+import { pilotStatusColor, pilotStatusLabel, formatCurrency, formatDate } from "../lib/utils";
 import StartupAIMatchViewer from "../components/StartupAIMatchViewer";
+
+const DEFAULT_CHALLENGES = [
+  {
+    id: "demo-ch-1",
+    title: "AI-Powered Predictive Maintenance for Track Infrastructure",
+    department: "Ministry of Railways",
+    sector: "Deep Tech",
+    budget: "₹2.5 Cr",
+    deadline: "2026-10-15",
+    problem_statement: "Autonomous inspection of rail track anomalies using computer vision models mounted on inspection locomotives.",
+    description: "Seeking deep tech startups with computer vision models for real-time crack detection.",
+    eligibility: "DPIIT Recognized Startups with TRL-6+ technology",
+    status: "Published",
+    created_at: new Date().toISOString()
+  },
+  {
+    id: "demo-ch-2",
+    title: "Last-Mile Diagnostic Solutions for Tier-3 Health Centres",
+    department: "Ministry of Health & Family Welfare",
+    sector: "HealthTech & Life Sciences",
+    budget: "₹80 Lakhs",
+    deadline: "2026-09-30",
+    problem_statement: "Low-cost portable point-of-care blood diagnostic devices for rural primary health centres.",
+    description: "Portable battery-operated point of care diagnostic device for 20+ blood parameters.",
+    eligibility: "MedTech Startups & ISO 13485 certified manufacturers",
+    status: "Published",
+    created_at: new Date().toISOString()
+  },
+  {
+    id: "demo-ch-3",
+    title: "High-Efficiency Solid-State Battery Storage for Micro-Grids",
+    department: "Ministry of Power & Renewable Energy",
+    sector: "CleanTech & Renewable Energy",
+    budget: "₹3.2 Cr",
+    deadline: "2026-12-10",
+    problem_statement: "Next-gen battery storage solutions with >92% round trip efficiency for remote micro-grids.",
+    description: "Scaling solid state lithium battery technology for micro-grid energy storage.",
+    eligibility: "CleanTech companies with indigenous cell chemistry IP",
+    status: "Published",
+    created_at: new Date().toISOString()
+  }
+];
 
 const SECTORS = [
   "All",
@@ -56,7 +100,7 @@ function ApplicationStatusBadge({ status }) {
   );
 }
 
-function ApplicationAIMatchCard({ app }) {
+function ApplicationAIMatchCard({ app, onSelect }) {
   const [match, setMatch] = useState(null);
 
   useEffect(() => {
@@ -75,7 +119,7 @@ function ApplicationAIMatchCard({ app }) {
 
   return (
     <div
-      onClick={() => setViewAppModal(app)}
+      onClick={() => onSelect && onSelect(app)}
       className="cursor-pointer p-4 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-white hover:shadow-md transition-all"
     >
       <div className="flex items-center justify-between mb-2">
@@ -118,7 +162,9 @@ export default function StartupDashboard() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
 
+  const [activeSection, setActiveSection] = useState("dashboard");
   const [challenges, setChallenges] = useState([]);
+
   const [applications, setApplications] = useState([]);
   const [pilotOffers, setPilotOffers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -209,12 +255,13 @@ export default function StartupDashboard() {
 
       if (pErr) console.warn("Pilot offers error:", pErr.message);
 
-      setChallenges(challengesData || []);
+      setChallenges((challengesData && challengesData.length > 0) ? challengesData : DEFAULT_CHALLENGES);
       setApplications(appsData || []);
       setBusinessData(bizData);
       setPilotOffers(pilotData || []);
     } catch (err) {
       console.warn("Load data error:", err);
+      setChallenges(DEFAULT_CHALLENGES);
     } finally {
       setLoading(false);
     }
@@ -332,323 +379,227 @@ export default function StartupDashboard() {
   const startupName = profile?.organization_name || "Indigenous Startup Enterprise";
   const founderName = profile?.full_name || user?.email?.split("@")[0];
 
+  const STARTUP_NAV = [
+    { id: "dashboard",   label: "Dashboard",            icon: LayoutDashboard, badge: undefined },
+    { id: "challenges",  label: "Available Challenges",  icon: FileText,         badge: availableCount || undefined },
+    { id: "applications",label: "My Applications",       icon: Send,             badge: appliedCount || undefined },
+    { id: "pilots",      label: "Pilots",                icon: Target,           badge: pilotOffers.length || undefined },
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header Bar */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0">
-              <Rocket className="w-7 h-7 text-amber-600" />
-            </div>
-            <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-bold mb-2">
-                <ShieldCheck className="w-3.5 h-3.5" /> DPIIT-Aligned Startup Track
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-                {startupName}
-              </h1>
-              <p className="text-sm text-slate-500 mt-1">
-                Founder / Lead: <strong className="text-slate-700">{founderName}</strong> {profile?.sector && `· ${profile.sector}`}
-              </p>
-            </div>
-          </div>
+    <DashboardLayout
+      role="startup"
+      activeSection={activeSection}
+      onSectionChange={setActiveSection}
+      navItems={STARTUP_NAV}
+    >
+      <div className="space-y-8">
 
-          <div className="flex items-center gap-3">
-            <Link
-              to="/profile"
-              className="px-4 py-2.5 text-sm font-semibold border border-slate-300 rounded-xl hover:bg-slate-50 text-slate-700"
-            >
-              Update Profile
-            </Link>
-          </div>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard icon={Rocket} value={availableCount} label="Available Challenges" color="bg-amber-50 text-amber-600" sub="Live government tenders" />
-          <StatCard icon={Send} value={appliedCount} label="Proposals Submitted" color="bg-blue-50 text-blue-600" sub="Active solutions logged" />
-          <StatCard icon={Clock} value={underReviewCount} label="Under Ministry Review" color="bg-purple-50 text-purple-600" sub="In evaluation phase" />
-          <StatCard icon={CheckCircle2} value={shortlistedCount + pilotOffers.length} label="Shortlisted / Pilots" color="bg-emerald-50 text-emerald-600" sub={`${shortlistedCount} shortlisted · ${pilotOffers.length} pilot offers`} />
-        </div>
-
-        {/* My Applications Section */}
-        {applications.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-lg font-bold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-                  My Submitted Applications
-                </h2>
-                <p className="text-xs text-slate-500">Track real-time government review status of your solutions.</p>
-              </div>
-              <span className="text-xs font-semibold text-slate-500">
-                {applications.length} Total
-              </span>
+        {/* ===== DASHBOARD SECTION ===== */}
+        {activeSection === "dashboard" && (
+          <div className="space-y-8">
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <StatCard icon={Rocket} value={availableCount} label="Available Challenges" color="bg-amber-50 text-amber-600" sub="Live government tenders" />
+              <StatCard icon={Send} value={appliedCount} label="Proposals Submitted" color="bg-blue-50 text-blue-600" sub="Active solutions logged" />
+              <StatCard icon={Clock} value={underReviewCount} label="Under Ministry Review" color="bg-purple-50 text-purple-600" sub="In evaluation phase" />
+              <StatCard icon={CheckCircle2} value={shortlistedCount + pilotOffers.length} label="Shortlisted / Pilots" color="bg-emerald-50 text-emerald-600" sub={`${shortlistedCount} shortlisted · ${pilotOffers.length} pilot offers`} />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {applications.map((app) => (
-                <div
-                  key={app.id}
-                  onClick={() => setViewAppModal(app)}
-                  className="cursor-pointer p-4 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-white hover:shadow-md transition-all flex flex-col justify-between"
-                >
+            {/* Quick Applications Preview */}
+            {applications.length > 0 && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+                <div className="flex items-center justify-between mb-4">
                   <div>
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider line-clamp-1">
-                        {app.challenges?.department || "Govt Department"}
-                      </span>
+                    <h2 className="text-base font-bold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>My Recent Applications</h2>
+                    <p className="text-xs text-slate-500">Track government review status of your solutions.</p>
+                  </div>
+                  <button onClick={() => setActiveSection("applications")} className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800">
+                    View All <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="space-y-3">
+                  {applications.slice(0, 3).map((app) => (
+                    <div key={app.id} onClick={() => setViewAppModal(app)}
+                      className="cursor-pointer flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 transition-all">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-sm text-slate-900 truncate">{app.solution_title}</div>
+                        <div className="text-xs text-slate-400 truncate">For: {app.challenges?.title}</div>
+                      </div>
                       <ApplicationStatusBadge status={app.status} />
                     </div>
-                    <h3 className="font-bold text-sm text-slate-900 mb-1 line-clamp-1">{app.solution_title}</h3>
-                    <div className="text-xs text-slate-600 line-clamp-1 mb-2">
-                      For: <strong>{app.challenges?.title}</strong>
-                    </div>
-                    <p className="text-xs text-slate-500 line-clamp-2">{app.solution_description}</p>
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-400">
-                    <span>Submitted {new Date(app.created_at).toLocaleDateString()}</span>
-                    <span className="font-semibold text-blue-600 flex items-center gap-0.5">
-                      View <Eye className="w-3 h-3" />
-                    </span>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* AI Match Scores Section (for startups with AI analyses) */}
-        {applications.filter((a) => a.status !== "Rejected" && a.status !== "Submitted").length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-                AI-Assisted Match Analysis
-              </h2>
-              <Link
-                to="/pilot-management"
-                className="text-xs font-semibold text-amber-600 hover:text-amber-800 flex items-center gap-1"
-              >
-                View All <ArrowRight className="w-3 h-3" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {applications
-                .filter((a) => a.status !== "Rejected" && a.status !== "Submitted")
-                .slice(0, 6)
-                .map((app) => (
-                  <ApplicationAIMatchCard key={app.id} app={app} />
-                ))}
-            </div>
-          </div>
-        )}
-
-        {/* Pilot Opportunities Section */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-                Pilot Opportunities
-              </h2>
-              <p className="text-xs text-slate-500">Pilot offers and negotiations from government departments.</p>
-            </div>
-            <Link
-              to="/pilot-management"
-              className="text-xs font-semibold text-amber-600 hover:text-amber-800 flex items-center gap-1"
-            >
-              Manage All <ArrowRight className="w-3 h-3" />
-            </Link>
-          </div>
-
-          {pilotOffers.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">
-              <Rocket className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-sm font-medium">No pilot opportunities yet</p>
-              <p className="text-xs mt-1">
-                Pilot offers appear here when a government department selects your solution.
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {pilotOffers.slice(0, 6).map((offer) => (
-                <div
-                  key={offer.id}
-                  onClick={() => navigate(`/pilot-management/${offer.id}`)}
-                  className="cursor-pointer p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-md transition-all"
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-bold text-slate-500 uppercase">
-                      {offer.challenges?.title || "Challenge"}
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${pilotStatusColor(offer.status)}`}>
-                      ● {pilotStatusLabel(offer.status)}
-                    </span>
-                  </div>
-                  <h3 className="font-bold text-sm text-slate-900 mb-1 line-clamp-1">
-                    {offer.objective || "Pilot Offer"}
-                  </h3>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-500 mt-2">
-                    <div className="flex items-center gap-1">
-                      <IndianRupee className="w-3 h-3" />
-                      {formatCurrency(offer.proposed_budget) || "—"}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {offer.duration ? `${offer.duration}d` : "—"}
-                    </div>
-                  </div>
-                  {offer.start_date && (
-                    <div className="text-xs text-slate-500 mt-1">
-                      Starts: {formatDate(offer.start_date)}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* PRIMARY SECTION: Available Government Challenges */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <div>
-              <h2 className="text-xl font-bold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-                Available Government Challenges
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Official problem statements proposed by Ministries and PSUs. Submit your solution for grant funding and pilots.
-              </p>
-            </div>
-
-            {/* Search input */}
-            <div className="flex items-center gap-2 bg-slate-100 px-3.5 py-2 rounded-xl border border-slate-200 w-full md:w-80">
-              <Search className="w-4 h-4 text-slate-400 shrink-0" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search challenges, departments..."
-                className="w-full text-xs text-slate-800 placeholder-slate-400 bg-transparent outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Sector Filter Chips */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-6 border-b border-slate-100">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-2 flex items-center gap-1">
-              <Filter className="w-3 h-3" /> Sector:
-            </span>
-            {SECTORS.map((sec) => (
-              <button
-                key={sec}
-                onClick={() => setSelectedSector(sec)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                  selectedSector === sec
-                    ? "bg-[#0B192C] text-white shadow-sm"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                {sec}
-              </button>
-            ))}
-          </div>
-
-          {/* Challenges Grid */}
-          {loading ? (
-            <div className="p-16 text-center text-slate-500 flex flex-col items-center justify-center gap-3">
-              <Loader2 className="w-8 h-8 animate-spin text-slate-400" />
-              <span className="text-sm">Fetching verified national challenges...</span>
-            </div>
-          ) : filteredChallenges.length === 0 ? (
-            <div className="p-16 text-center text-slate-500 flex flex-col items-center justify-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                <Search className="w-6 h-6" />
               </div>
-              <h3 className="font-semibold text-slate-800 text-base">No Matching Challenges Found</h3>
-              <p className="text-xs text-slate-500 max-w-sm">
-                Try selecting a different sector filter or searching for another keyword.
-              </p>
+            )}
+
+            {/* Recent Pilot Offers Summary */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-base font-bold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Recent Pilot Offers</h2>
+                <button onClick={() => setActiveSection("pilots")} className="flex items-center gap-1.5 text-xs font-semibold text-amber-600 hover:text-amber-800">View All <ArrowRight className="w-3.5 h-3.5" /></button>
+              </div>
+              {pilotOffers.length === 0 ? (
+                <div className="p-6 text-center text-slate-400 text-xs bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                  No pilot offers yet. They appear here when government departments select your solution.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pilotOffers.slice(0, 3).map((offer) => (
+                    <div key={offer.id} onClick={() => navigate(`/pilot-management/${offer.id}`)}
+                      className="cursor-pointer flex items-center justify-between p-3 rounded-xl border border-slate-200 hover:bg-slate-50 transition-all">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-sm text-slate-900 truncate">{offer.objective || "Pilot Offer"}</div>
+                        <div className="text-xs text-slate-400 truncate">{offer.challenges?.title}</div>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ml-3 ${pilotStatusColor(offer.status)}`}>{pilotStatusLabel(offer.status)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredChallenges.map((c) => {
-                const applied = hasApplied(c.id);
-                return (
-                  <div
-                    key={c.id}
-                    className="rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-lg transition-all flex flex-col justify-between overflow-hidden"
-                  >
-                    <div className="p-5 flex-1">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 uppercase tracking-wider">
-                          {c.sector}
-                        </span>
-                        <span className="text-[11px] text-slate-400 flex items-center gap-1 font-medium">
-                          <Clock className="w-3 h-3" /> {c.deadline || "Open"}
-                        </span>
-                      </div>
+          </div>
+        )}
 
-                      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold mb-1">
-                        <Landmark className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span className="truncate">{c.department}</span>
-                      </div>
-
-                      <h3 className="font-bold text-slate-900 text-base leading-snug mb-2 line-clamp-2" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-                        {c.title}
-                      </h3>
-
-                      <p className="text-xs text-slate-600 line-clamp-3 mb-4 leading-relaxed">
-                        {c.problem_statement}
-                      </p>
-
-                      <div className="space-y-1.5 text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                        <div>
-                          <strong className="text-slate-700">Grant / Budget:</strong> {c.budget || "Govt Procurement"}
+        {/* ===== CHALLENGES SECTION ===== */}
+        {activeSection === "challenges" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-extrabold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Available Government Challenges</h2>
+              <p className="text-sm text-slate-500 mt-1">Official problem statements from Ministries. Submit your solution for grant funding and pilots.</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              {/* Search + Filter */}
+              <div className="flex flex-col md:flex-row md:items-center gap-4 mb-6">
+                <div className="flex items-center gap-2 bg-slate-100 px-3.5 py-2 rounded-xl border border-slate-200 flex-1">
+                  <Search className="w-4 h-4 text-slate-400 shrink-0" />
+                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search challenges, departments..." className="w-full text-xs text-slate-800 placeholder-slate-400 bg-transparent outline-none" />
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-3 mb-6 border-b border-slate-100">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-2"><Filter className="w-3 h-3 inline" /> Sector:</span>
+                {SECTORS.map((sec) => (
+                  <button key={sec} onClick={() => setSelectedSector(sec)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${ selectedSector === sec ? "bg-[#0B192C] text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200" }`}
+                  >{sec}</button>
+                ))}
+              </div>
+              {loading ? (
+                <div className="p-12 text-center flex flex-col items-center gap-3"><Loader2 className="w-8 h-8 animate-spin text-slate-400" /><span className="text-sm text-slate-500">Loading challenges...</span></div>
+              ) : filteredChallenges.length === 0 ? (
+                <div className="p-12 text-center flex flex-col items-center gap-3"><Search className="w-8 h-8 text-slate-300" /><h3 className="font-semibold text-slate-800">No Matching Challenges</h3></div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {filteredChallenges.map((c) => {
+                    const applied = hasApplied(c.id);
+                    return (
+                      <div key={c.id} className="rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-lg transition-all flex flex-col justify-between overflow-hidden">
+                        <div className="p-5 flex-1">
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 uppercase tracking-wider">{c.sector}</span>
+                            <span className="text-[11px] text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3" /> {c.deadline || "Open"}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold mb-1"><Landmark className="w-3.5 h-3.5 text-slate-400" /><span className="truncate">{c.department}</span></div>
+                          <h3 className="font-bold text-slate-900 text-sm leading-snug mb-2 line-clamp-2" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>{c.title}</h3>
+                          <p className="text-xs text-slate-500 line-clamp-2">{c.problem_statement}</p>
                         </div>
-                        <div>
-                          <strong className="text-slate-700">Outcome:</strong> {c.expected_outcome || "Pilot Deployment"}
+                        <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/50 flex gap-2">
+                          <button onClick={() => setDetailModalChallenge(c)} className="flex-1 py-2 text-xs font-semibold border border-slate-200 rounded-lg hover:bg-slate-100 text-slate-700">View Details</button>
+                          {applied ? (
+                            <span className="flex-1 py-2 text-xs font-bold text-center bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200"><CheckCircle2 className="w-3.5 h-3.5 inline mr-1" />Applied</span>
+                          ) : (
+                            <button onClick={() => setApplyModalChallenge(c)} className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold rounded-lg bg-[#0B192C] hover:bg-[#1E3E62] text-white">Apply <ArrowRight className="w-3.5 h-3.5" /></button>
+                          )}
                         </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ===== APPLICATIONS SECTION ===== */}
+        {activeSection === "applications" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-extrabold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>My Applications</h2>
+              <p className="text-sm text-slate-500 mt-1">Track real-time government review status of your submitted solutions.</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              {applications.length === 0 ? (
+                <div className="p-12 text-center flex flex-col items-center gap-3">
+                  <Send className="w-8 h-8 text-slate-300" />
+                  <h3 className="font-semibold text-slate-800">No Applications Yet</h3>
+                  <p className="text-xs text-slate-500">Browse challenges and submit your first solution.</p>
+                  <button onClick={() => setActiveSection("challenges")} className="mt-2 flex items-center gap-2 px-4 py-2 bg-[#0B192C] text-white rounded-xl text-xs font-semibold">Browse Challenges <ArrowRight className="w-3.5 h-3.5" /></button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {applications.map((app) => (
+                    <div key={app.id} onClick={() => setViewAppModal(app)}
+                      className="cursor-pointer p-4 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-white hover:shadow-md transition-all flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider line-clamp-1">{app.challenges?.department || "Govt Department"}</span>
+                          <ApplicationStatusBadge status={app.status} />
+                        </div>
+                        <h3 className="font-bold text-sm text-slate-900 mb-1 line-clamp-1">{app.solution_title}</h3>
+                        <div className="text-xs text-slate-600 line-clamp-1 mb-2">For: <strong>{app.challenges?.title}</strong></div>
+                        <p className="text-xs text-slate-500 line-clamp-2">{app.solution_description}</p>
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-slate-200/60 flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Submitted {new Date(app.created_at).toLocaleDateString()}</span>
+                        <span className="font-semibold text-blue-600 flex items-center gap-0.5">View <Eye className="w-3 h-3" /></span>
                       </div>
                     </div>
-
-                    <div className="px-5 py-3.5 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between gap-3">
-                      <button
-                        onClick={() => setDetailModalChallenge(c)}
-                        className="text-xs font-semibold text-slate-700 hover:text-slate-900 py-2 px-2.5"
-                      >
-                        Read Statement
-                      </button>
-
-                      {applied ? (
-                        <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-100 text-emerald-800">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Applied
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setApplyModalChallenge(c);
-                            setAppForm((prev) => ({
-                              ...prev,
-                              solution_title: `Innovative Solution for ${c.title}`,
-                            }));
-                          }}
-                          className="flex items-center gap-1.5 px-4 py-2 bg-[#0B192C] hover:bg-[#1E3E62] text-white font-bold text-xs rounded-xl transition-all shadow-sm"
-                        >
-                          Apply for Challenge <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* ===== PILOTS SECTION ===== */}
+        {activeSection === "pilots" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-extrabold text-slate-900" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Pilot Opportunities</h2>
+              <p className="text-sm text-slate-500 mt-1">Pilot offers and negotiations from government departments.</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              {pilotOffers.length === 0 ? (
+                <div className="p-12 text-center flex flex-col items-center gap-3">
+                  <Target className="w-8 h-8 text-slate-300" />
+                  <h3 className="font-semibold text-slate-800">No Pilot Offers Yet</h3>
+                  <p className="text-xs text-slate-500 max-w-md">Pilot offers appear here when a government department selects your solution for a pilot deployment.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {pilotOffers.map((offer) => (
+                    <div key={offer.id} onClick={() => navigate(`/pilot-management/${offer.id}`)}
+                      className="cursor-pointer p-4 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:shadow-md transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-500 uppercase truncate">{offer.challenges?.title || "Challenge"}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${pilotStatusColor(offer.status)}`}>● {pilotStatusLabel(offer.status)}</span>
+                      </div>
+                      <h3 className="font-bold text-sm text-slate-900 mb-2 line-clamp-1">{offer.objective || "Pilot Offer"}</h3>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-slate-500">
+                        <div className="flex items-center gap-1"><IndianRupee className="w-3 h-3" />{formatCurrency(offer.proposed_budget) || "—"}</div>
+                        <div className="flex items-center gap-1"><Calendar className="w-3 h-3" />{offer.duration ? `${offer.duration}d` : "—"}</div>
+                      </div>
+                      {offer.start_date && <div className="text-xs text-slate-500 mt-1">Starts: {formatDate(offer.start_date)}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
 
-      {/* CHALLENGE DETAILS MODAL */}
       {detailModalChallenge && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative max-h-[90vh] overflow-y-auto">
@@ -1175,9 +1126,9 @@ export default function StartupDashboard() {
             >
               Close
             </button>
+            </div>
           </div>
-        </div>
       )}
-    </div>
+    </DashboardLayout>
   );
 }

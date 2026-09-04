@@ -43,15 +43,59 @@ alter table public.profiles add constraint profiles_verification_status_check ch
 
 alter table public.profiles enable row level security;
 
--- Anti-tampering function & trigger: Prevents non-admins from modifying their own role or verification_status
+-- SECURITY DEFINER helper: looks up the caller's admin status by bypassing RLS.
+-- Policies MUST call this instead of querying public.profiles directly for an
+-- admin check — a policy on public.profiles that queries public.profiles under
+-- RLS re-triggers itself and Postgres raises "infinite recursion detected in
+-- policy for relation profiles" (and the same error cascades to every other
+-- table whose policies also check admin status this way).
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1 from public.profiles where id = auth.uid() and role = 'admin'
+  );
+$$;
+
+grant execute on function public.is_admin() to authenticated, anon;
+
+-- Anti-tampering function & trigger: prevents self-registration privilege escalation
+-- (INSERT) and non-admins modifying their own role/verification_status (UPDATE).
+--
+-- The INSERT policy below only checks `auth.uid() = id` — nothing stops a
+-- freshly signed-up user from calling
+-- `supabase.from('profiles').insert({ id: session.user.id, role: 'admin',
+-- verification_status: 'verified', ... })` directly against the REST API
+-- before the app ever runs its own insert, since Postgres RLS/grants don't
+-- know or care which client sent the request. Before this fix that request
+-- would have succeeded and made every public.is_admin() check on every
+-- other table treat that user as an administrator.
 create or replace function public.handle_profile_security_update()
 returns trigger as $$
-declare
-  caller_role text;
 begin
-  select role into caller_role from public.profiles where id = auth.uid();
-  -- If caller is not an administrator, prevent altering role, verification_status, or rejection_reason
-  if caller_role is distinct from 'admin' then
+  if tg_op = 'INSERT' then
+    if public.is_admin() then
+      return new; -- admin-initiated inserts (tooling) pass through untouched
+    end if;
+    -- Self-registration: role can only be the two self-selectable tracks —
+    -- 'admin' is never claimable this way — and verification_status is
+    -- always derived server-side from that role, never trusted from the
+    -- client (a government account cannot insert itself as 'verified').
+    if new.role is distinct from 'government' then
+      new.role := 'startup';
+    end if;
+    new.verification_status := case when new.role = 'government' then 'pending' else 'verified' end;
+    new.rejection_reason := null;
+    new.updated_at := now();
+    return new;
+  end if;
+
+  -- UPDATE path: non-admins cannot alter role, verification_status, or rejection_reason
+  if not public.is_admin() then
     new.role := old.role;
     new.verification_status := old.verification_status;
     new.rejection_reason := old.rejection_reason;
@@ -63,7 +107,7 @@ $$ language plpgsql security definer;
 
 drop trigger if exists tr_prevent_role_tampering on public.profiles;
 create trigger tr_prevent_role_tampering
-  before update on public.profiles
+  before insert or update on public.profiles
   for each row execute function public.handle_profile_security_update();
 
 -- Profiles RLS policies:
@@ -72,7 +116,7 @@ drop policy if exists "Users can view own profile" on public.profiles;
 create policy "Users can view own profile" on public.profiles
   for select using (
     auth.uid() = id or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 drop policy if exists "Users can upsert own profile" on public.profiles;
@@ -84,7 +128,7 @@ drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile" on public.profiles
   for update using (
     auth.uid() = id or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 
@@ -154,7 +198,7 @@ create policy "View challenges policy" on public.challenges
   for select using (
     status = 'Published' or
     auth.uid() = created_by or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 -- ONLY VERIFIED government users can create challenges
@@ -185,7 +229,7 @@ create policy "Verified government users update own challenges" on public.challe
         and verification_status = 'verified'
       )
     ) or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 -- ONLY VERIFIED government users can delete their own draft challenges
@@ -246,7 +290,7 @@ create policy "Read challenge applications policy" on public.challenge_applicati
       and p.role = 'government'
       and p.verification_status = 'verified'
     ) or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 -- Verified government creators and admins can update application status
@@ -261,7 +305,7 @@ create policy "Government can update application status" on public.challenge_app
       and p.role = 'government'
       and p.verification_status = 'verified'
     ) or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 
@@ -284,7 +328,12 @@ create policy "Users manage own applications" on public.applications
 
 
 -- 7. SEED INITIAL SCHEMES
-insert into public.schemes (name, description, category, eligibility, benefits, status) values
+-- Guarded on an empty table, not "on conflict do nothing" — id is a random
+-- uuid on every insert so there is no real conflict target, and re-running
+-- this file (safe/expected for every other statement above) would otherwise
+-- duplicate the catalog on each run.
+insert into public.schemes (name, description, category, eligibility, benefits, status)
+select * from (values
 (
   'PM Vishwakarma Yojana',
   'A scheme to support traditional artisans and craftspeople with skill upgradation, modern tools, digital empowerment, and market linkage.',
@@ -349,11 +398,14 @@ insert into public.schemes (name, description, category, eligibility, benefits, 
   'Shishu: up to ₹50,000 | Kishore: ₹50,000–5 lakh | Tarun: ₹5–10 lakh, no collateral required',
   'active'
 )
-on conflict do nothing;
+) as t(name, description, category, eligibility, benefits, status)
+where not exists (select 1 from public.schemes);
 
 
 -- 8. SEED INITIAL PUBLISHED NATIONAL CHALLENGES
-insert into public.challenges (title, problem_statement, description, department, sector, expected_outcome, eligibility, deadline, budget, location, status) values
+-- Same empty-table guard as the schemes seed above, for the same reason.
+insert into public.challenges (title, problem_statement, description, department, sector, expected_outcome, eligibility, deadline, budget, location, status)
+select * from (values
 (
   'AI-Powered Predictive Maintenance for Track Infrastructure',
   'Indian Railways manages over 68,000 route km. Unscheduled rail fractures and track anomalies cause speed restrictions and delays. We require an automated, vehicle-mounted or satellite-linked AI vision and acoustic sensing system to detect sub-surface rail fatigue before structural failure occurs.',
@@ -362,7 +414,7 @@ insert into public.challenges (title, problem_statement, description, department
   'Deep Tech',
   'Field-tested pilot across 500 km of high-density freight corridor with >95% defect classification accuracy',
   'DPIIT recognized startups with proven capabilities in computer vision, acoustic sensing, or railway telemetry',
-  '2026-10-15',
+  '2026-10-15'::date,
   '₹2.5 Cr Grant + Commercial Pilot',
   'Pan-India (Northern & Eastern Corridors)',
   'Published'
@@ -375,7 +427,7 @@ insert into public.challenges (title, problem_statement, description, department
   'HealthTech & Life Sciences',
   'Deployment of 25 prototype kits across 5 aspirational districts with automated telemetry sync',
   'Startups and innovators with CDSCO compliance pathway and indigenous manufacturing capability',
-  '2026-11-30',
+  '2026-11-30'::date,
   '₹80 Lakhs + Pilot Procurement Order',
   'Northeast & Tribal Districts',
   'Published'
@@ -388,22 +440,13 @@ insert into public.challenges (title, problem_statement, description, department
   'Defence & Aerospace',
   'Successful autonomous demonstration of 5-drone perimeter surveillance under GPS-denied conditions',
   'Indian incorporated entities with >51% resident Indian ownership and iDEX eligibility',
-  '2026-12-15',
+  '2026-12-15'::date,
   '₹5.0 Cr Development Grant',
   'High-Altitude Border Test Range',
   'Published'
 )
-on conflict do nothing;
-
-
--- ============================================================
--- 9. ADMIN BOOTSTRAP INSTRUCTIONS:
--- To designate your first administrator, run this query in the Supabase SQL Editor:
---
--- UPDATE public.profiles
--- SET role = 'admin', verification_status = 'verified'
--- WHERE email = 'your_admin_email@example.com';
--- ============================================================
+) as t(title, problem_statement, description, department, sector, expected_outcome, eligibility, deadline, budget, location, status)
+where not exists (select 1 from public.challenges);
 
 
 -- ============================================================
@@ -426,6 +469,48 @@ alter table public.challenge_applications
 alter table public.challenge_applications
   add constraint challenge_applications_status_check
   check (status in ('Submitted', 'Under Review', 'Shortlisted', 'Rejected', 'Selected', 'Pilot Offered'));
+
+-- Trigger: the government-side UPDATE policy above only re-checks the
+-- challenge relationship, not which columns changed — nothing stops a
+-- government caller from also rewriting the applicant's own submission
+-- (startup_id, solution_description, etc.) in the same request instead of
+-- just moving `status`. The app itself (GovernmentDashboard.jsx,
+-- GovernmentApplicationReview.jsx) only ever updates `status`, so pinning
+-- every other column here matches actual usage and closes that gap.
+create or replace function public.pin_application_content()
+returns trigger as $$
+begin
+  if public.is_admin() then
+    return new;
+  end if;
+  new.challenge_id               := old.challenge_id;
+  new.startup_id                 := old.startup_id;
+  new.startup_name               := old.startup_name;
+  new.contact_person             := old.contact_person;
+  new.solution_title             := old.solution_title;
+  new.solution_description       := old.solution_description;
+  new.technology                 := old.technology;
+  new.expected_impact            := old.expected_impact;
+  new.timeline                   := old.timeline;
+  new.estimated_cost             := old.estimated_cost;
+  new.problem_solving_approach   := old.problem_solving_approach;
+  new.key_features                := old.key_features;
+  new.implementation_methodology := old.implementation_methodology;
+  new.current_maturity           := old.current_maturity;
+  new.existing_deployments       := old.existing_deployments;
+  new.team_capabilities          := old.team_capabilities;
+  new.pitch_summary              := old.pitch_summary;
+  new.supporting_docs_url        := old.supporting_docs_url;
+  new.created_at                 := old.created_at;
+  new.updated_at := now();
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists tr_pin_application_content on public.challenge_applications;
+create trigger tr_pin_application_content
+  before update on public.challenge_applications
+  for each row execute function public.pin_application_content();
 
 
 -- ============================================================
@@ -483,7 +568,7 @@ create policy "Read AI match scores policy" on public.ai_match_scores
         and p.role = 'government'
         and p.verification_status = 'verified'
     ) or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 -- Update: verified govt owner only
@@ -499,14 +584,14 @@ create policy "Govt owners can update AI match scores" on public.ai_match_scores
         and p.role = 'government'
         and p.verification_status = 'verified'
     ) or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 -- Delete: admin only
 drop policy if exists "Admins can delete AI match scores" on public.ai_match_scores;
 create policy "Admins can delete AI match scores" on public.ai_match_scores
   for delete using (
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 
@@ -609,7 +694,7 @@ create policy "Pilot participants can read pilot offers" on public.pilot_offers
   for select using (
     government_id = auth.uid() or
     startup_id    = auth.uid() or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 -- Update: both participants can update (status transitions via trigger)
@@ -618,14 +703,52 @@ create policy "Pilot participants can update pilot offers" on public.pilot_offer
   for update using (
     government_id = auth.uid() or
     startup_id    = auth.uid() or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
+
+-- Trigger: the policy above (and tr_validate_pilot_status) only govern who
+-- may update a row and which status transitions are legal — neither stops a
+-- participant from also rewriting the offer's terms (proposed_budget,
+-- deliverables, objective, ...) or even reassigning startup_id/government_id
+-- in that same request. The app (NegotiationWorkspace.jsx, PilotManagement.jsx)
+-- only ever updates `status`; real term changes go through pilot_negotiations
+-- instead. Pin everything but status so this table can't be used to alter an
+-- agreed pilot's terms or ownership after the fact.
+create or replace function public.pin_pilot_offer_content()
+returns trigger as $$
+begin
+  if public.is_admin() then
+    return new;
+  end if;
+  new.challenge_id       := old.challenge_id;
+  new.application_id     := old.application_id;
+  new.government_id      := old.government_id;
+  new.startup_id         := old.startup_id;
+  new.objective           := old.objective;
+  new.location            := old.location;
+  new.duration            := old.duration;
+  new.proposed_budget     := old.proposed_budget;
+  new.start_date          := old.start_date;
+  new.deliverables        := old.deliverables;
+  new.success_criteria    := old.success_criteria;
+  new.beneficiaries       := old.beneficiaries;
+  new.special_conditions  := old.special_conditions;
+  new.additional_notes    := old.additional_notes;
+  new.created_at          := old.created_at;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists tr_pin_pilot_offer_content on public.pilot_offers;
+create trigger tr_pin_pilot_offer_content
+  before update on public.pilot_offers
+  for each row execute function public.pin_pilot_offer_content();
 
 -- Delete: admin only
 drop policy if exists "Admins can delete pilot offers" on public.pilot_offers;
 create policy "Admins can delete pilot offers" on public.pilot_offers
   for delete using (
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 
@@ -674,7 +797,7 @@ create policy "Pilot participants read negotiations" on public.pilot_negotiation
       where po.id = pilot_negotiations.pilot_offer_id
         and (po.government_id = auth.uid() or po.startup_id = auth.uid())
     ) or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 -- Insert: only the actual sender who is a participant
@@ -699,6 +822,33 @@ create policy "Participants can update negotiation status" on public.pilot_negot
         and (po.government_id = auth.uid() or po.startup_id = auth.uid())
     )
   );
+
+-- Trigger: this table is documented and relied upon as immutable proposal
+-- history, but the UPDATE policy above (needed so tr_mark_superseded can
+-- flip status on either party's own prior row) has no column restriction —
+-- without this, either participant could call the public REST API directly
+-- and rewrite the *content* (message/budget/duration/date) of a proposal
+-- that was actually sent by the other side, misrepresenting what was
+-- negotiated. Pin every column except status so only status can ever change.
+create or replace function public.pin_negotiation_content()
+returns trigger as $$
+begin
+  new.pilot_offer_id    := old.pilot_offer_id;
+  new.sender_id          := old.sender_id;
+  new.sender_role        := old.sender_role;
+  new.message             := old.message;
+  new.proposed_budget     := old.proposed_budget;
+  new.proposed_duration   := old.proposed_duration;
+  new.proposed_start_date := old.proposed_start_date;
+  new.created_at          := old.created_at;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists tr_pin_negotiation_content on public.pilot_negotiations;
+create trigger tr_pin_negotiation_content
+  before update on public.pilot_negotiations
+  for each row execute function public.pin_negotiation_content();
 
 
 -- ============================================================
@@ -734,7 +884,7 @@ create policy "Pilot participants read results" on public.pilot_results
       where po.id = pilot_results.pilot_offer_id
         and (po.government_id = auth.uid() or po.startup_id = auth.uid())
     ) or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 -- Insert: verified government owner
@@ -750,19 +900,19 @@ create policy "Govt owner can create results" on public.pilot_results
         and p.role = 'government'
         and p.verification_status = 'verified'
     ) or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
--- Update: both participants
+-- Update: admin only. The app (PilotManagement.jsx) only ever inserts a
+-- pilot_results row once and never updates it, so a "both participants can
+-- update" policy has no legitimate use — it would only let either party
+-- silently overwrite the counterparty's outcome/feedback/recommendation
+-- after the fact with no authorship protection. Locking updates to admin
+-- removes that gap without touching real functionality.
 drop policy if exists "Participants can update results" on public.pilot_results;
 create policy "Participants can update results" on public.pilot_results
   for update using (
-    exists (
-      select 1 from public.pilot_offers po
-      where po.id = pilot_results.pilot_offer_id
-        and (po.government_id = auth.uid() or po.startup_id = auth.uid())
-    ) or
-    exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+    public.is_admin()
   );
 
 
@@ -789,7 +939,7 @@ create policy "Users can read own notifications" on public.notifications
 -- Insert: any authenticated user can send notifications (frontend triggers)
 drop policy if exists "Users can create notifications" on public.notifications;
 create policy "Users can create notifications" on public.notifications
-  for insert with check (auth.uid() = recipient_id or exists (select 1 from public.profiles where id = auth.uid() and role = 'admin'));
+  for insert with check (auth.uid() = recipient_id or public.is_admin());
 
 -- Update: mark own notifications as read
 drop policy if exists "Users can update own notifications" on public.notifications;
@@ -953,3 +1103,47 @@ end;
 $$ language plpgsql security definer;
 
 grant execute on function public.create_notification to authenticated, anon;
+
+
+-- ============================================================
+-- 16. TABLE-LEVEL GRANTS
+-- ============================================================
+-- RLS policies above are the real access control — they restrict *which rows*
+-- a role can see or touch. But Postgres also requires a base table-level grant
+-- before RLS is even consulted; without it every query fails with
+-- "permission denied for table X" regardless of how permissive the policies
+-- are. A fresh Supabase project grants these automatically, but this schema
+-- never did, so anon/authenticated had no privileges on businesses,
+-- applications, schemes, or notifications at all.
+grant usage on schema public to anon, authenticated;
+
+-- Publicly browsable data (no login required): schemes catalog and
+-- published national challenges.
+grant select on public.schemes to anon;
+grant select on public.challenges to anon;
+
+-- Everything else requires an authenticated session; RLS policies above
+-- scope each authenticated user down to their own rows (or their role's
+-- permitted rows).
+grant select, insert, update, delete on public.profiles              to authenticated;
+grant select, insert, update, delete on public.businesses            to authenticated;
+grant select, insert, update, delete on public.schemes               to authenticated;
+grant select, insert, update, delete on public.challenges            to authenticated;
+grant select, insert, update, delete on public.challenge_applications to authenticated;
+grant select, insert, update, delete on public.applications          to authenticated;
+grant select, insert, update, delete on public.ai_match_scores       to authenticated;
+grant select, insert, update, delete on public.pilot_offers          to authenticated;
+grant select, insert, update, delete on public.pilot_negotiations    to authenticated;
+grant select, insert, update, delete on public.pilot_results         to authenticated;
+grant select, insert, update, delete on public.notifications         to authenticated;
+
+-- All primary keys use gen_random_uuid() defaults (no serial/identity
+-- columns), so no sequence grants are required.
+
+
+-- ============================================================
+-- 17. ADMIN BOOTSTRAP (run manually after your first real sign-up)
+-- ============================================================
+-- update public.profiles
+-- set role = 'admin', verification_status = 'verified'
+-- where email = 'your_admin_email@example.com';

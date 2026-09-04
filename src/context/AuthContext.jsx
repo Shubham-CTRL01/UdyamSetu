@@ -10,6 +10,70 @@ export function AuthProvider({ children }) {
   const [role, setRole] = useState(null); // "government" | "startup"
   const [loading, setLoading] = useState(true);
 
+  // Demo Users Preset Profiles
+  const DEMO_PROFILES = {
+    government_verified: {
+      user: { id: "demo-govt-railways-001", email: "director.railways@gov.in" },
+      profile: {
+        id: "demo-govt-railways-001",
+        full_name: "Dr. Amit Sharma",
+        email: "director.railways@gov.in",
+        phone: "+91 98100 12345",
+        role: "government",
+        verification_status: "verified",
+        govt_level: "Central Ministry",
+        organization_name: "Ministry of Railways",
+        designation: "Director of Innovation & Technology",
+        description: "Public rail network infrastructure, signaling systems, and rolling stock modernizations.",
+        website: "https://railways.gov.in",
+      },
+    },
+    government_pending: {
+      user: { id: "demo-govt-dot-002", email: "undersec.dot@nic.in" },
+      profile: {
+        id: "demo-govt-dot-002",
+        full_name: "Pooja Verma",
+        email: "undersec.dot@nic.in",
+        phone: "+91 98111 54321",
+        role: "government",
+        verification_status: "pending",
+        govt_level: "Central Ministry",
+        organization_name: "Department of Telecommunications",
+        designation: "Under Secretary (Telecom Research)",
+        description: "5G & 6G indigenous stack deployment, rural connectivity, and optical fiber broadband expansion.",
+        website: "https://dot.gov.in",
+      },
+    },
+    startup: {
+      user: { id: "demo-startup-apex-001", email: "vikram@apexvision.ai" },
+      profile: {
+        id: "demo-startup-apex-001",
+        full_name: "Vikram Patel",
+        email: "vikram@apexvision.ai",
+        phone: "+91 99887 76655",
+        role: "startup",
+        verification_status: "verified",
+        organization_name: "ApexVision AI Labs",
+        sector: "Deep Tech",
+        description: "Computer vision and edge AI models for predictive maintenance of industrial assets.",
+        website: "https://apexvision.ai",
+      },
+    },
+    admin: {
+      user: { id: "demo-admin-001", email: "admin@udyamsetu.gov.in" },
+      profile: {
+        id: "demo-admin-001",
+        full_name: "National Portal Admin",
+        email: "admin@udyamsetu.gov.in",
+        phone: "+91 11 2345 6789",
+        role: "admin",
+        verification_status: "verified",
+        organization_name: "UdyamSetu Sovereign Governance Gateway",
+        designation: "Lead Systems Auditor",
+      },
+    },
+  };
+
   // Fetch or initialize profile record
   const fetchProfile = useCallback(async (userId, fallbackMetadata = null) => {
     if (!userId) {
@@ -74,6 +138,18 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     let mounted = true;
 
+    // 0. Check local demo session first
+    const savedDemoKey = localStorage.getItem("udyamsetu_demo_session");
+    if (savedDemoKey && DEMO_PROFILES[savedDemoKey]) {
+      const demoData = DEMO_PROFILES[savedDemoKey];
+      setUser(demoData.user);
+      setSession({ user: demoData.user });
+      setProfile(demoData.profile);
+      setRole(demoData.profile.role);
+      setLoading(false);
+      return;
+    }
+
     // 1. Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return;
@@ -91,6 +167,9 @@ export function AuthProvider({ children }) {
     // 2. Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       if (!mounted) return;
+      // Don't overwrite active demo session with null if demo key present
+      if (!newSession && localStorage.getItem("udyamsetu_demo_session")) return;
+
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
@@ -107,6 +186,27 @@ export function AuthProvider({ children }) {
       subscription.unsubscribe();
     };
   }, [fetchProfile]);
+
+  const signInDemo = (demoKey = "government_verified") => {
+    const demoData = DEMO_PROFILES[demoKey] || DEMO_PROFILES.government_verified;
+    localStorage.setItem("udyamsetu_demo_session", demoKey);
+    setUser(demoData.user);
+    setSession({ user: demoData.user });
+    setProfile(demoData.profile);
+    setRole(demoData.profile.role);
+    setLoading(false);
+    return demoData;
+  };
+
+  const verifyCurrentAccount = async () => {
+    if (!profile) return;
+    const updated = { ...profile, verification_status: "verified" };
+    setProfile(updated);
+    // Also sync with DB if real user
+    if (user && !user.id.startsWith("demo-")) {
+      await supabase.from("profiles").update({ verification_status: "verified" }).eq("id", user.id);
+    }
+  };
 
   const signUp = async (email, password, roleData) => {
     const {
@@ -195,6 +295,7 @@ export function AuthProvider({ children }) {
   };
 
   const signOut = async () => {
+    localStorage.removeItem("udyamsetu_demo_session");
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
@@ -203,7 +304,7 @@ export function AuthProvider({ children }) {
   };
 
   const refreshProfile = async () => {
-    if (user) {
+    if (user && !user.id.startsWith("demo-")) {
       await fetchProfile(user.id, user.user_metadata);
     }
   };
@@ -229,6 +330,8 @@ export function AuthProvider({ children }) {
         isAdmin,
         loading,
         signIn,
+        signInDemo,
+        verifyCurrentAccount,
         signUp,
         signOut,
         refreshProfile,
