@@ -159,6 +159,15 @@ export default function Schemes() {
       setTimeout(() => navigate("/login"), 1500);
       return;
     }
+
+    // Demo accounts use human-readable ids, not real uuids, so they can't
+    // write to uuid-keyed tables — applying isn't something a demo session
+    // can persist, so say so instead of a query silently 400ing.
+    if (user.id.startsWith("demo-")) {
+      showToast("error", "Demo accounts can't submit real applications. Sign up for a real account to apply.");
+      return;
+    }
+
     setApplying(scheme.id);
 
     // Check business profile

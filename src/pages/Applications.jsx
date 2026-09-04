@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
@@ -35,6 +35,13 @@ export default function Applications() {
   const loadApplications = useCallback(async () => {
     if (!user) return;
     setLoading(true);
+    // Demo accounts use human-readable ids, not real uuids, so filtering by
+    // user_id would just 400 against this uuid column.
+    if (user.id.startsWith("demo-")) {
+      setApps([]);
+      setLoading(false);
+      return;
+    }
     const { data } = await supabase
       .from("applications")
       .select("*, schemes(name, category, description), businesses(business_name)")

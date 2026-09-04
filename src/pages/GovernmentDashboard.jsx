@@ -109,6 +109,15 @@ export default function GovernmentDashboard() {
     setLoading(true);
 
     try {
+      // Demo accounts use human-readable ids (e.g. "demo-govt-railways-001"),
+      // not real uuids, so a query filtered by created_by=user.id would just
+      // 400 against this uuid column — skip straight to empty demo state.
+      if (user.id.startsWith("demo-")) {
+        setChallenges([]);
+        setApplications([]);
+        return;
+      }
+
       // 1. Fetch Government Challenges
       const { data: challengesData, error: cErr } = await supabase
         .from("challenges")

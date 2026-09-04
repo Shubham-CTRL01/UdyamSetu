@@ -72,6 +72,13 @@ export default function PilotManagement() {
     if (!user) return;
     setLoading(true);
     try {
+      // Demo accounts use human-readable ids, not real uuids, so filtering
+      // by government_id/startup_id would just 400 against a uuid column.
+      if (user.id.startsWith("demo-")) {
+        setOffers(DEFAULT_PILOT_OFFERS);
+        return;
+      }
+
       let query = supabase
         .from("pilot_offers")
         .select(`
@@ -117,6 +124,15 @@ export default function PilotManagement() {
     if (!offerId || !user) return;
     setDetailLoading(true);
     try {
+      // Demo pilot offers (e.g. "demo-pilot-1") aren't real uuids and were
+      // never persisted — go straight to the matching demo record instead
+      // of querying a uuid column with a non-uuid value.
+      if (offerId.startsWith("demo-")) {
+        const found = DEFAULT_PILOT_OFFERS.find((o) => o.id === offerId) || DEFAULT_PILOT_OFFERS[0];
+        setSelectedOffer(found);
+        return;
+      }
+
       const { data, error: err } = await supabase
         .from("pilot_offers")
         .select(`

@@ -229,6 +229,17 @@ export default function StartupDashboard() {
         .order("created_at", { ascending: false });
 
       if (cErr) console.warn("Challenges error:", cErr.message);
+      setChallenges((challengesData && challengesData.length > 0) ? challengesData : DEFAULT_CHALLENGES);
+
+      // Demo accounts use human-readable ids (e.g. "demo-startup-apex-001"),
+      // not real uuids, so any query filtered by user.id would just 400
+      // against these uuid columns — skip straight to empty/demo state.
+      if (user.id.startsWith("demo-")) {
+        setApplications([]);
+        setBusinessData(null);
+        setPilotOffers([]);
+        return;
+      }
 
       // 2. Fetch Startup's Applications
       const { data: appsData, error: aErr } = await supabase
@@ -255,7 +266,6 @@ export default function StartupDashboard() {
 
       if (pErr) console.warn("Pilot offers error:", pErr.message);
 
-      setChallenges((challengesData && challengesData.length > 0) ? challengesData : DEFAULT_CHALLENGES);
       setApplications(appsData || []);
       setBusinessData(bizData);
       setPilotOffers(pilotData || []);
@@ -283,6 +293,14 @@ export default function StartupDashboard() {
 
     if (!appForm.solution_title || !appForm.solution_description) {
       setAppError("Solution title and detailed description are required.");
+      return;
+    }
+
+    // Demo accounts use human-readable ids, not real uuids, so they can't
+    // write to uuid-keyed tables — say so plainly instead of surfacing a
+    // raw "invalid input syntax for type uuid" database error.
+    if (user.id.startsWith("demo-")) {
+      setAppError("Demo accounts can't submit real applications. Sign up for a real account to apply.");
       return;
     }
 
