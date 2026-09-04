@@ -120,7 +120,7 @@ export default function GovernmentApplicationReview() {
         analysis_text: result.analysisText,
         concerns_text: result.concernsText,
         scorer_version: result.scorerVersion,
-      });
+      }, { onConflict: "application_id" });
       if (saveErr) {
         setError(saveErr.message);
       } else {

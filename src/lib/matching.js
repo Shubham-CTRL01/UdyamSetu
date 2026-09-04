@@ -423,7 +423,7 @@ export async function saveMatchScore(supabaseClient, applicationId, result) {
     analysis_text: result.analysisText,
     concerns_text: result.concernsText,
     scorer_version: result.scorerVersion,
-  });
+  }, { onConflict: "application_id" });
   return { error };
 }
 
