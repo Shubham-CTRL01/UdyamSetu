@@ -49,9 +49,8 @@ export default function Footer() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
           <div>© 2026 UdyamSetu National Portal · Ministry of Commerce & Industry, Government of India</div>
           <div className="flex items-center gap-4">
-            <Link to="#" className="hover:text-slate-300 transition-colors">Privacy Policy</Link>
-            <Link to="#" className="hover:text-slate-300 transition-colors">Terms of Access</Link>
-            <Link to="#" className="hover:text-slate-300 transition-colors">Security Policy</Link>
+            <Link to="/security-policy" className="hover:text-slate-300 transition-colors">Privacy &amp; Security Policy</Link>
+            <Link to="/terms-of-access" className="hover:text-slate-300 transition-colors">Terms of Access</Link>
           </div>
         </div>
       </div>

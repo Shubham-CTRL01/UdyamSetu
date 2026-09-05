@@ -16,6 +16,8 @@ const GovApplicationReview   = lazy(() => import("./pages/GovernmentApplicationR
 const PilotManagement        = lazy(() => import("./pages/PilotManagement"));
 const ChallengeDiscovery     = lazy(() => import("./pages/ChallengeDiscovery"));
 const ChallengeDetail        = lazy(() => import("./pages/ChallengeDetail"));
+const SecurityPolicy         = lazy(() => import("./pages/SecurityPolicy"));
+const TermsOfAccess          = lazy(() => import("./pages/TermsOfAccess"));
 
 function PageLoader() {
   return (
@@ -36,16 +38,19 @@ function RoleDashboardRouter() {
   return <Navigate to="/startup/dashboard" replace />;
 }
 
-// Layout wrapper — hides the sidebar nav on login page and dashboard pages with their own sidebar layout
+// Layout wrapper — hides the sidebar nav on login page, policy documents, and dashboard pages with their own sidebar layout
 function Layout({ children }) {
   const { pathname } = useLocation();
-  const isLogin = pathname === "/login";
+  const isStandalone =
+    pathname === "/login" ||
+    pathname === "/security-policy" ||
+    pathname === "/terms-of-access";
   const isDashboard =
     pathname.startsWith("/government/dashboard") ||
     pathname.startsWith("/startup/dashboard") ||
     pathname.startsWith("/government/challenges/create");
 
-  const showSidebar = !isLogin && !isDashboard;
+  const showSidebar = !isStandalone && !isDashboard;
 
   if (!showSidebar) {
     return (
@@ -82,6 +87,8 @@ export default function App() {
                 {/* Public Routes */}
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/login" element={<LoginPage />} />
+                <Route path="/security-policy" element={<SecurityPolicy />} />
+                <Route path="/terms-of-access" element={<TermsOfAccess />} />
 
                 {/* Role-Based Dashboards */}
                 <Route

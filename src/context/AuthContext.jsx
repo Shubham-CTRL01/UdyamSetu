@@ -44,6 +44,22 @@ export function AuthProvider({ children }) {
         website: "https://dot.gov.in",
       },
     },
+    janparichay: {
+      user: { id: "demo-govt-official-001", email: "official@gov.in" },
+      profile: {
+        id: "demo-govt-official-001",
+        full_name: "Government Official (JanParichay)",
+        email: "official@gov.in",
+        phone: "+91 98100 12345",
+        role: "government",
+        verification_status: "verified",
+        govt_level: "Central Ministry",
+        organization_name: "Ministry of Railways / MeitY",
+        designation: "Nodal Officer (Innovation & Technology)",
+        description: "National sovereign digital exchange and e-governance innovation mission.",
+        website: "https://gov.in",
+      },
+    },
     startup: {
       user: { id: "demo-startup-apex-001", email: "vikram@apexvision.ai" },
       profile: {
@@ -55,6 +71,7 @@ export function AuthProvider({ children }) {
         verification_status: "verified",
         organization_name: "ApexVision AI Labs",
         sector: "Deep Tech",
+        dpiit_id: "DIPP94821",
         description: "Computer vision and edge AI models for predictive maintenance of industrial assets.",
         website: "https://apexvision.ai",
       },
@@ -204,9 +221,13 @@ export function AuthProvider({ children }) {
       designation = "",
       govtLevel = "",
       sector = "",
+      dpiitId = "",
+      dpiit_id = "",
       description = "",
       website = "",
     } = roleData;
+
+    const resolvedDpiitId = dpiitId || dpiit_id || null;
 
     // Government accounts start as pending; startups start as verified
     const verificationStatus = role === "government" ? "pending" : "verified";
@@ -220,6 +241,7 @@ export function AuthProvider({ children }) {
       organization_name: organizationName,
       designation: designation || null,
       sector: sector || null,
+      dpiit_id: resolvedDpiitId,
       description: description || null,
       website: website || null,
     };
@@ -243,6 +265,7 @@ export function AuthProvider({ children }) {
         organization_name: organizationName,
         designation: designation || null,
         sector: sector || null,
+        dpiit_id: resolvedDpiitId,
         description: description || null,
         website: website || null,
       };

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -30,16 +30,16 @@ function SidebarContent({ pathname, user, profile, role, dashboardLink, lang, se
   const isActive = (to) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
 
   const navItems = [
-    { to: "/", icon: Home, label: "Home" },
-    { to: "/challenges", icon: Target, label: "Challenges" },
+    { to: "/", icon: Home, label: lang === "hi" ? "मुखपृष्ठ" : "Home" },
+    { to: "/challenges", icon: Target, label: lang === "hi" ? "चुनौतियां" : "Challenges" },
   ];
 
   const portalItems = user
     ? [
-        { to: dashboardLink, icon: LayoutDashboard, label: "Dashboard" },
+        { to: dashboardLink, icon: LayoutDashboard, label: lang === "hi" ? "डैशबोर्ड" : "Dashboard" },
         ...(!isAdmin
           ? [
-              { to: "/profile", icon: Settings, label: "Business Profile" },
+              { to: "/profile", icon: Settings, label: lang === "hi" ? "व्यावसायिक प्रोफ़ाइल" : "Business Profile" },
             ]
           : []),
       ]
@@ -60,14 +60,18 @@ function SidebarContent({ pathname, user, profile, role, dashboardLink, lang, se
 
       {/* Nav Items */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 mb-2">Menu</div>
+        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 mb-2">
+          {lang === "hi" ? "मेनू" : "Menu"}
+        </div>
         {navItems.map((item) => (
           <NavLink key={item.to} {...item} active={isActive(item.to)} onClick={onLinkClick} />
         ))}
 
         {portalItems.length > 0 && (
           <>
-            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 mt-5 mb-2">My Portal</div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4 mt-5 mb-2">
+              {lang === "hi" ? "मेरा पोर्टल" : "My Portal"}
+            </div>
             {portalItems.map((item) => (
               <NavLink key={item.to} {...item} active={isActive(item.to)} onClick={onLinkClick} />
             ))}
@@ -82,7 +86,7 @@ function SidebarContent({ pathname, user, profile, role, dashboardLink, lang, se
             <button
               key={l}
               onClick={() => setLang(l)}
-              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
                 lang === l ? "bg-white text-[#0B192C] shadow-sm" : "text-slate-500 hover:text-slate-700"
               }`}
             >
@@ -114,9 +118,9 @@ function SidebarContent({ pathname, user, profile, role, dashboardLink, lang, se
             </div>
             <button
               onClick={onLogout}
-              className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2 text-sm font-semibold text-white bg-[#0B192C] rounded-xl hover:bg-[#1E3E62] transition-colors shadow-sm"
+              className="w-full flex items-center justify-center gap-1.5 px-3.5 py-2 text-sm font-semibold text-white bg-[#0B192C] rounded-xl hover:bg-[#1E3E62] transition-colors shadow-sm cursor-pointer"
             >
-              <LogOut className="w-4 h-4" /> Sign Out
+              <LogOut className="w-4 h-4" /> {lang === "hi" ? "लॉग आउट" : "Sign Out"}
             </button>
           </>
         ) : (
@@ -125,7 +129,7 @@ function SidebarContent({ pathname, user, profile, role, dashboardLink, lang, se
             onClick={onLinkClick}
             className="w-full flex items-center justify-center gap-1.5 px-5 py-2.5 text-sm font-bold text-[#0B192C] bg-amber-400 hover:bg-amber-500 rounded-xl transition-all shadow-sm"
           >
-            <LogIn className="w-4 h-4" /> Sign In / Get Started
+            <LogIn className="w-4 h-4" /> {lang === "hi" ? "साइन इन / खाता बनाएं" : "Sign In / Get Started"}
           </Link>
         )}
       </div>
@@ -135,7 +139,37 @@ function SidebarContent({ pathname, user, profile, role, dashboardLink, lang, se
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [lang, setLang] = useState("en");
+  const [lang, setLang] = useState(() => {
+    try {
+      return localStorage.getItem("udyam_lang") || "en";
+    } catch {
+      return "en";
+    }
+  });
+
+  const handleLangChange = (l) => {
+    setLang(l);
+    try {
+      localStorage.setItem("udyam_lang", l);
+      window.dispatchEvent(new Event("languageChange"));
+    } catch (e) {
+      console.warn("Could not save language preference:", e);
+    }
+  };
+
+  useEffect(() => {
+    const onLanguageChange = () => {
+      try {
+        const saved = localStorage.getItem("udyam_lang");
+        if (saved && (saved === "en" || saved === "hi")) {
+          setLang(saved);
+        }
+      } catch (e) {}
+    };
+    window.addEventListener("languageChange", onLanguageChange);
+    return () => window.removeEventListener("languageChange", onLanguageChange);
+  }, []);
+
   const { user, profile, role, signOut } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -150,7 +184,7 @@ export default function Navbar() {
   const isGovt = role === "government";
   const dashboardLink = isGovt ? "/government/dashboard" : "/startup/dashboard";
 
-  const sidebarProps = { pathname, user, profile, role, dashboardLink, lang, setLang, onLogout: handleLogout };
+  const sidebarProps = { pathname, user, profile, role, dashboardLink, lang, setLang: handleLangChange, onLogout: handleLogout };
 
   return (
     <>
@@ -164,7 +198,7 @@ export default function Navbar() {
         <button
           onClick={() => setMenuOpen(true)}
           type="button"
-          className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors"
+          className="p-2 rounded-lg text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
         >
           <Menu className="w-5 h-5" />
         </button>
@@ -183,8 +217,8 @@ export default function Navbar() {
             {(profile?.full_name || user.email || "U")[0].toUpperCase()}
           </div>
         ) : (
-          <Link to="/login" className="text-xs font-bold text-[#0B192C] bg-amber-400 px-3 py-1.5 rounded-lg">
-            Sign In
+          <Link to="/login" className="text-xs font-bold text-[#0B192C] bg-amber-400 px-3 py-1.5 rounded-lg shadow-2xs">
+            {lang === "hi" ? "साइन इन" : "Sign In"}
           </Link>
         )}
       </div>
