@@ -64,9 +64,11 @@ function buildInitialState() {
         pilot_offer_id: "demo-pilot-1",
         sender_role: "government",
         sender_name: "Ministry of Railways",
+        sender: { full_name: "Ministry of Railways", organization_name: "Ministry of Railways", role: "government" },
         message: "We have reviewed your RailVision AI proposal and approved a 6-month live pilot across the Northern Railway Division with a ₹1.50 Cr milestone grant.",
-        budget: 15000000,
-        duration: 180,
+        proposed_budget: 15000000,
+        proposed_duration: 180,
+        status: "active",
         created_at: new Date(Date.now() - 48 * 3600000).toISOString()
       },
       {
@@ -74,9 +76,11 @@ function buildInitialState() {
         pilot_offer_id: "demo-pilot-1",
         sender_role: "startup",
         sender_name: "ApexVision AI Labs",
+        sender: { full_name: "Vikram Patel", organization_name: "ApexVision AI Labs", role: "startup" },
         message: "We accept the 6-month trial timeline and ₹1.50 Cr milestone allocation. Our engineering crew will initiate bogie mounts upon contract issuance.",
-        budget: 15000000,
-        duration: 180,
+        proposed_budget: 15000000,
+        proposed_duration: 180,
+        status: "accepted",
         created_at: new Date(Date.now() - 24 * 3600000).toISOString()
       }
     ]

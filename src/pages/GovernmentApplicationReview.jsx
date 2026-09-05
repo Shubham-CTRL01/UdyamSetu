@@ -36,7 +36,7 @@ export default function GovernmentApplicationReview() {
     try {
       if (applicationId.startsWith("demo-") || (user?.id && user.id.startsWith("demo-"))) {
         const demoApp = tempDb.getApplicationById(applicationId) || DEFAULT_APPLICATIONS[0];
-        const demoCh = demoApp.challenges || DEFAULT_CHALLENGES[0];
+        const demoCh = demoApp.challenges || (demoApp.challenge_id ? tempDb.getChallengeById(demoApp.challenge_id) : null) || DEFAULT_CHALLENGES[0];
         setApplication(demoApp);
         setChallenge(demoCh);
         setStartupProfile(DEFAULT_STARTUP_PROFILE);

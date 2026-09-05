@@ -1193,12 +1193,37 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
   const loadResult = useCallback(async () => {
     setLoading(true);
 
-    // 1. Check localStorage for instantaneous local state
+    // 1. In demo mode: read directly from tempDb so data persists across account switches
+    if (offerId && String(offerId).startsWith("demo-")) {
+      const demoRes = tempDb.getPilotResult(offerId) || DEFAULT_PILOT_RESULT_1;
+      setResult(demoRes);
+      setStartupForm({
+        outcome: demoRes.outcome || "",
+        success_metrics: demoRes.success_metrics || "",
+        kpi_actual: demoRes.kpi_actual || "",
+      });
+      setGovForm({
+        government_feedback: demoRes.government_feedback || "",
+        kpi_target: demoRes.kpi_target || "",
+        final_recommendation: demoRes.final_recommendation || "scale",
+        scale_up_pathway: demoRes.scale_up_pathway || "marketplace",
+        validator_name: demoRes.validator_name || "",
+        validation_summary: demoRes.validation_summary || "",
+        validation_status: demoRes.validation_status || "passed",
+      });
+      if (demoRes.updated_at || demoRes.created_at) {
+        setLastSyncedAt(demoRes.updated_at || demoRes.created_at);
+      }
+      setDbStatus("connected");
+      setLoading(false);
+      return;
+    }
+
     let cached = null;
     try {
-      const stored = localStorage.getItem(`udyam_pilot_result_${offerId}`);
-      if (stored) {
-        cached = JSON.parse(stored);
+      const raw = localStorage.getItem(`udyam_pilot_result_${offerId}`);
+      if (raw) {
+        cached = JSON.parse(raw);
         setResult(cached);
         setStartupForm({
           outcome: cached.outcome || "",
@@ -1220,29 +1245,6 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
       }
     } catch (e) {
       console.warn("LocalStorage cache read notice:", e);
-    }
-
-    // Default verified result for demo-pilot-1 if no local override
-    if (!cached && offerId === "demo-pilot-1") {
-      const def = DEFAULT_PILOT_RESULT_1;
-      setResult(def);
-      setStartupForm({
-        outcome: def.outcome || "",
-        success_metrics: def.success_metrics || "",
-        kpi_actual: def.kpi_actual || "",
-      });
-      setGovForm({
-        government_feedback: def.government_feedback || "",
-        kpi_target: def.kpi_target || "",
-        final_recommendation: def.final_recommendation || "scale",
-        scale_up_pathway: def.scale_up_pathway || "marketplace",
-        validator_name: def.validator_name || "",
-        validation_summary: def.validation_summary || "",
-        validation_status: def.validation_status || "passed",
-      });
-      setDbStatus("connected");
-      setLoading(false);
-      return;
     }
 
     // 2. Query Supabase database if real UUID offerId
@@ -1297,7 +1299,15 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
     setLoading(false);
   }, [offerId]);
 
-  useEffect(() => { loadResult(); }, [loadResult]);
+  useEffect(() => {
+    loadResult();
+    const unsub = subscribeTempDb(() => {
+      if (offerId && String(offerId).startsWith("demo-")) {
+        loadResult();
+      }
+    });
+    return unsub;
+  }, [loadResult, offerId]);
 
   const upsert = async (payload, isStartup = false) => {
     // Form validation for startup submission
@@ -1407,10 +1417,16 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
           );
         }
       } else {
-        // Demo mode
+        // Demo mode: persist to tempDb
+        const updated = tempDb.upsertPilotResult(offerId, payload);
+        setResult(updated);
         setDbStatus("connected");
         setLastSyncedAt(nowIso);
-        setSaveSuccess(isGovernment ? "Evaluation & Decision saved successfully!" : "Final results submitted successfully!");
+        setSaveSuccess(
+          isGovernment
+            ? "✓ Evaluation & Decision saved to Temporary Database!"
+            : "✓ Final results saved to Temporary Database!"
+        );
       }
 
       // Notify counterparty

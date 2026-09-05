@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { formatCurrency, formatDate } from "../lib/utils";
 import { supabase } from "../lib/supabase";
+import { tempDb, subscribeTempDb } from "../lib/tempDb";
 
 const inputCls =
   "w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl bg-white text-slate-800 placeholder-slate-400 outline-none focus:border-[#0B192C] focus:ring-2 focus:ring-[#0B192C]/10 transition-all";
@@ -20,6 +21,12 @@ export default function NegotiationWorkspace({ pilotOffer, currentUser, onUpdate
   const loadNegotiations = async () => {
     setLoading(true);
     try {
+      if (pilotOffer?.id && String(pilotOffer.id).startsWith("demo-")) {
+        const data = tempDb.getNegotiations(pilotOffer.id);
+        setNegotiations(data || []);
+        return;
+      }
+
       const { data, error: err } = await supabase
         .from("pilot_negotiations")
         .select(`
@@ -40,6 +47,12 @@ export default function NegotiationWorkspace({ pilotOffer, currentUser, onUpdate
 
   useEffect(() => {
     loadNegotiations();
+    const unsub = subscribeTempDb(() => {
+      if (pilotOffer?.id && String(pilotOffer.id).startsWith("demo-")) {
+        loadNegotiations();
+      }
+    });
+    return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pilotOffer.id]);
 
@@ -47,6 +60,13 @@ export default function NegotiationWorkspace({ pilotOffer, currentUser, onUpdate
     setError("");
     setLoading(true);
     try {
+      if (String(pilotOffer.id).startsWith("demo-")) {
+        tempDb.updatePilotOffer(pilotOffer.id, { status: "accepted" });
+        await loadNegotiations();
+        if (onUpdated) onUpdated();
+        return;
+      }
+
       const { error: err } = await supabase
         .from("pilot_offers")
         .update({ status: "accepted" })
@@ -67,6 +87,13 @@ export default function NegotiationWorkspace({ pilotOffer, currentUser, onUpdate
     setError("");
     setLoading(true);
     try {
+      if (String(pilotOffer.id).startsWith("demo-")) {
+        tempDb.updatePilotOffer(pilotOffer.id, { status: "declined" });
+        await loadNegotiations();
+        if (onUpdated) onUpdated();
+        return;
+      }
+
       const { error: err } = await supabase
         .from("pilot_offers")
         .update({ status: "declined" })
@@ -87,6 +114,13 @@ export default function NegotiationWorkspace({ pilotOffer, currentUser, onUpdate
     setError("");
     setLoading(true);
     try {
+      if (String(pilotOffer.id).startsWith("demo-")) {
+        tempDb.updatePilotOffer(pilotOffer.id, { status: "in_progress" });
+        await loadNegotiations();
+        if (onUpdated) onUpdated();
+        return;
+      }
+
       const { error: err } = await supabase
         .from("pilot_offers")
         .update({ status: "in_progress" })
@@ -107,6 +141,13 @@ export default function NegotiationWorkspace({ pilotOffer, currentUser, onUpdate
     setError("");
     setLoading(true);
     try {
+      if (String(pilotOffer.id).startsWith("demo-")) {
+        tempDb.updatePilotOffer(pilotOffer.id, { status: "cancelled" });
+        await loadNegotiations();
+        if (onUpdated) onUpdated();
+        return;
+      }
+
       const { error: err } = await supabase
         .from("pilot_offers")
         .update({ status: "cancelled" })

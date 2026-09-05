@@ -7,7 +7,7 @@ import {
   CheckCircle2, Rocket, LogIn,
 } from "lucide-react";
 import ChallengeApplyForm from "../components/ChallengeApplyForm";
-import { tempDb } from "../lib/tempDb";
+import { tempDb, subscribeTempDb } from "../lib/tempDb";
 
 export default function ChallengeDetail() {
   const { challengeId } = useParams();
@@ -74,6 +74,10 @@ export default function ChallengeDetail() {
 
   useEffect(() => {
     loadChallenge();
+    const unsub = subscribeTempDb(() => {
+      loadChallenge();
+    });
+    return unsub;
   }, [loadChallenge]);
 
   if (loading) {
@@ -94,7 +98,7 @@ export default function ChallengeDetail() {
     );
   }
 
-  const canApply = user && role === "startup" && !user.id.startsWith("demo-") && !alreadyApplied;
+  const canApply = user && role === "startup" && !alreadyApplied;
 
   return (
     <div className="min-h-screen bg-slate-50 py-8 px-4 sm:px-6 lg:px-8">
@@ -174,11 +178,6 @@ export default function ChallengeDetail() {
           </div>
         )}
 
-        {user && user.id.startsWith("demo-") && role === "startup" && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-sm text-amber-800">
-            Demo accounts can't submit real applications. Sign up for a real account to apply.
-          </div>
-        )}
 
         {alreadyApplied && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 text-sm text-emerald-800 flex items-center gap-2">

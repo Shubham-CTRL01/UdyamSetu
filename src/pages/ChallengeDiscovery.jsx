@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabase";
 import {
   Search, Filter, Landmark, Clock, ArrowLeft, ArrowRight, Loader2,
 } from "lucide-react";
+import { tempDb, subscribeTempDb } from "../lib/tempDb";
 
 const SECTORS = [
   "All", "Deep Tech", "Defence & Aerospace", "HealthTech & Life Sciences",
@@ -36,18 +37,42 @@ export default function ChallengeDiscovery() {
   const [deadlineFilter, setDeadlineFilter] = useState("Any Time");
   const [minBudget, setMinBudget] = useState("");
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      const { data } = await supabase
+  const loadChallenges = async () => {
+    setLoading(true);
+    try {
+      if (user?.id && user.id.startsWith("demo-")) {
+        const demoChs = tempDb.getChallenges().filter((c) => c.status === "Published" || !c.status);
+        setChallenges(demoChs);
+        return;
+      }
+
+      const { data, error } = await supabase
         .from("challenges")
         .select("*")
         .eq("status", "Published")
         .order("created_at", { ascending: false });
-      setChallenges(data || []);
+
+      if (error || !data || data.length === 0) {
+        const demoChs = tempDb.getChallenges().filter((c) => c.status === "Published" || !c.status);
+        setChallenges(demoChs);
+      } else {
+        setChallenges(data);
+      }
+    } catch {
+      const demoChs = tempDb.getChallenges().filter((c) => c.status === "Published" || !c.status);
+      setChallenges(demoChs);
+    } finally {
       setLoading(false);
-    })();
-  }, []);
+    }
+  };
+
+  useEffect(() => {
+    loadChallenges();
+    const unsub = subscribeTempDb(() => {
+      loadChallenges();
+    });
+    return unsub;
+  }, [user]);
 
   const backLink = user
     ? role === "government" ? "/government/dashboard" : "/startup/dashboard"

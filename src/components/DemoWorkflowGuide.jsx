@@ -5,8 +5,9 @@ import { WORKFLOW_STAGES } from "../lib/demoData";
 import {
   Landmark, Rocket, BrainCircuit, FileCheck, Target, Award,
   ArrowRight, ArrowLeft, X, ChevronUp, ChevronDown, Zap, Users,
-  CheckCircle2, Sparkles
+  CheckCircle2, Sparkles, Database, RotateCcw
 } from "lucide-react";
+import { tempDb } from "../lib/tempDb";
 
 const ICON_MAP = {
   Landmark,
@@ -169,6 +170,28 @@ export default function DemoWorkflowGuide() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Temp DB Sync Indicator */}
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-semibold" title="Data is retained in local temporary database while switching accounts">
+              <Database className="w-3 h-3 text-emerald-400" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="hidden md:inline">{lang === "hi" ? "अस्थायी डेटाबेस सक्रिय" : "Temp DB: Active & Synced"}</span>
+            </div>
+
+            {/* Reset Demo Data Button */}
+            <button
+              onClick={() => {
+                if (window.confirm(lang === "hi" ? "क्या आप डेमो डेटा रीसेट करना चाहते हैं? सभी बनाए गए बदलाव प्रारंभिक स्थिति में लौट जाएंगे।" : "Reset temporary demo database back to clean defaults? All submitted challenges, applications and pilot steps will be restored to default seeds.")) {
+                  tempDb.resetTempDb();
+                  window.location.reload();
+                }
+              }}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-rose-950/60 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-700/60 text-[11px] font-medium transition-colors cursor-pointer"
+              title="Reset temporary demo database back to default state"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span className="hidden lg:inline">{lang === "hi" ? "रीसेट" : "Reset Demo"}</span>
+            </button>
+
             <button
               onClick={toggleRole}
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/15 text-slate-200 text-xs font-semibold border border-white/10 transition-colors cursor-pointer"
