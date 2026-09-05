@@ -7,6 +7,8 @@ import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import { Loader2 } from "lucide-react";
 
+import DemoWorkflowGuide from "./components/DemoWorkflowGuide";
+
 const LandingPage            = lazy(() => import("./pages/LandingPage"));
 const LoginPage              = lazy(() => import("./pages/LoginPage"));
 const GovernmentDashboard    = lazy(() => import("./pages/GovernmentDashboard"));
@@ -168,6 +170,7 @@ export default function App() {
               </Routes>
             </Suspense>
           </Layout>
+          <DemoWorkflowGuide />
         </NotificationsProvider>
       </AuthProvider>
     </BrowserRouter>

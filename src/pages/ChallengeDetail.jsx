@@ -7,6 +7,7 @@ import {
   CheckCircle2, Rocket, LogIn,
 } from "lucide-react";
 import ChallengeApplyForm from "../components/ChallengeApplyForm";
+import { tempDb } from "../lib/tempDb";
 
 export default function ChallengeDetail() {
   const { challengeId } = useParams();
@@ -22,6 +23,21 @@ export default function ChallengeDetail() {
   const loadChallenge = useCallback(async () => {
     setLoading(true);
     try {
+      const isDemo =
+        (user?.id && user.id.startsWith("demo-")) ||
+        String(challengeId).startsWith("demo-") ||
+        String(challengeId).startsWith("ch-local-");
+
+      if (isDemo) {
+        const found = tempDb.getChallengeById(challengeId) || tempDb.getChallenges()[0];
+        setChallenge(found);
+        const demoApps = tempDb.getApplicationsByStartup(user?.id);
+        const already = demoApps.some((a) => String(a.challenge_id) === String(challengeId));
+        setAlreadyApplied(already);
+        setLoading(false);
+        return;
+      }
+
       const { data, error: err } = await supabase
         .from("challenges")
         .select("*")
@@ -29,6 +45,13 @@ export default function ChallengeDetail() {
         .maybeSingle();
 
       if (err || !data) {
+        // Fallback to tempDb
+        const fallback = tempDb.getChallengeById(challengeId);
+        if (fallback) {
+          setChallenge(fallback);
+          setLoading(false);
+          return;
+        }
         setError("Challenge not found or is no longer published.");
         setChallenge(null);
         return;

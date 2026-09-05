@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabase";
 import {
   ArrowLeft, Loader2, AlertTriangle, Rocket, Send, Check, X,
   Calendar, IndianRupee, Users, List, Clipboard, MapPin,
-  FileText, BrainCircuit, TrendingUp, Clock, Save
+  FileText, BrainCircuit, TrendingUp, Clock, Save, Database,
+  CheckCircle2
 } from "lucide-react";
 import {
   formatCurrency, formatDate, pilotStatusLabel, pilotStatusColor,
@@ -13,17 +14,23 @@ import {
 } from "../lib/utils";
 import AIMatchPanel from "../components/AIMatchPanel";
 import { analyzeApplication } from "../lib/matching";
+import { DEFAULT_PILOT_RESULT_1 } from "../lib/demoData";
+import { tempDb, subscribeTempDb } from "../lib/tempDb";
 
-const DEFAULT_PILOT_OFFERS = [
+export const DEFAULT_PILOT_OFFERS = [
   {
     id: "demo-pilot-1",
     challenge_id: "demo-ch-1",
     government_id: "demo-govt-railways-001",
     startup_id: "demo-startup-apex-001",
-    status: "Pilot Active",
-    grant_allocated: "₹1.5 Cr",
+    status: "in_progress",
+    grant_allocated: "₹1.50 Cr",
+    proposed_budget: 15000000,
     pilot_duration: "6 Months",
+    duration: 180,
+    start_date: "2026-08-01",
     location: "Northern Railway Zone (Delhi - Ambala Division)",
+    objective: "Deploy vision AI camera arrays on 4 inspection locomotives for real-time track defect detection.",
     scope: "Deploy vision AI camera arrays on 4 inspection locomotives for real-time track defect detection.",
     milestones: [
       { id: "m1", title: "Hardware Mount & Camera Calibration", status: "Completed", date: "2026-08-15" },
@@ -50,6 +57,46 @@ const DEFAULT_PILOT_OFFERS = [
       website: "https://apexvision.ai",
       description: "Computer vision edge models for heavy transport infrastructure."
     }
+  },
+  {
+    id: "demo-pilot-2",
+    challenge_id: "demo-ch-2",
+    government_id: "demo-govt-defence-002",
+    startup_id: "demo-startup-garuda-002",
+    status: "accepted",
+    grant_allocated: "₹85 Lakh",
+    proposed_budget: 8500000,
+    pilot_duration: "3 Months",
+    duration: 90,
+    start_date: "2026-09-01",
+    location: "Forward Operations Logistics Hub, Western Sector",
+    objective: "Autonomous perimeter surveillance and drone swarm threat detection under extreme weather conditions.",
+    scope: "Autonomous perimeter surveillance and drone swarm threat detection under extreme weather conditions.",
+    milestones: [
+      { id: "m1", title: "Sensor Node Deployment & Mesh Networking", status: "Completed", date: "2026-09-10" },
+      { id: "m2", title: "Autonomous Patrol Simulation & Alert Triangulation", status: "In Progress", date: "2026-10-15" },
+      { id: "m3", title: "Field Command Integration & Trial Sign-Off", status: "Pending", date: "2026-11-30" },
+    ],
+    created_at: new Date(Date.now() - 7 * 86400000).toISOString(),
+    challenges: {
+      title: "Autonomous Surveillance for Strategic Perimeter Defence",
+      department: "Ministry of Defence",
+      sector: "Defence & Aerospace",
+      budget: "₹1.2 Cr"
+    },
+    applications: {
+      solution_title: "GarudaNet Autonomous Edge Surveillance Grid",
+      solution_description: "Solar-powered thermal and optical sensor network with satellite telemetry.",
+      startup_name: "Garuda Aerotech"
+    },
+    startup_profile: {
+      full_name: "Col. Raghavendra Joshi (Retd.)",
+      organization_name: "Garuda Aerotech",
+      sector: "Defence & Aerospace",
+      email: "contact@garudaaerotech.in",
+      website: "https://garudaaerotech.in",
+      description: "Tactical defense electronics and autonomous surveillance solutions."
+    }
   }
 ];
 
@@ -71,10 +118,10 @@ export default function PilotManagement() {
     if (!user) return;
     setLoading(true);
     try {
-      // Demo accounts use human-readable ids, not real uuids, so filtering
-      // by government_id/startup_id would just 400 against a uuid column.
+      // Demo accounts use tempDb so changes persist across account switches
       if (user.id.startsWith("demo-")) {
-        setOffers(DEFAULT_PILOT_OFFERS);
+        const demoOffers = tempDb.getPilotOffers();
+        setOffers(demoOffers);
         return;
       }
 
@@ -98,13 +145,13 @@ export default function PilotManagement() {
       const { data, error: err } = await query;
       if (err) {
         console.warn("Pilot offers query notice:", err.message);
-        setOffers(DEFAULT_PILOT_OFFERS);
+        setOffers(tempDb.getPilotOffers());
       } else {
-        setOffers((data && data.length > 0) ? data : DEFAULT_PILOT_OFFERS);
+        setOffers((data && data.length > 0) ? data : tempDb.getPilotOffers());
       }
     } catch (err) {
       console.warn("Load offers catch:", err);
-      setOffers(DEFAULT_PILOT_OFFERS);
+      setOffers(tempDb.getPilotOffers());
     } finally {
       setLoading(false);
     }
@@ -116,18 +163,24 @@ export default function PilotManagement() {
       return;
     }
     loadOffers();
-  }, [user, navigate, loadOffers]);
+
+    const unsubscribe = subscribeTempDb(() => {
+      loadOffers();
+      if (pilotId) {
+        loadOfferDetail(pilotId);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user, navigate, loadOffers, pilotId, loadOfferDetail]);
 
   // Load single offer detail
   const loadOfferDetail = useCallback(async (offerId) => {
     if (!offerId || !user) return;
     setDetailLoading(true);
     try {
-      // Demo pilot offers (e.g. "demo-pilot-1") aren't real uuids and were
-      // never persisted — go straight to the matching demo record instead
-      // of querying a uuid column with a non-uuid value.
       if (offerId.startsWith("demo-")) {
-        const found = DEFAULT_PILOT_OFFERS.find((o) => o.id === offerId) || DEFAULT_PILOT_OFFERS[0];
+        const found = tempDb.getPilotOfferById(offerId) || DEFAULT_PILOT_OFFERS.find((o) => o.id === offerId) || DEFAULT_PILOT_OFFERS[0];
         setSelectedOffer(found);
         return;
       }
@@ -346,6 +399,7 @@ function PilotOfferCard({ offer, isGovernment, onClick }) {
 
 function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const isGovernment = profile?.role === "government";
   const challenge = offer.challenges;
@@ -358,6 +412,17 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
   useEffect(() => {
     setOfferData(offer);
   }, [offer]);
+
+  useEffect(() => {
+    if (location.state?.scrollToResults) {
+      setTimeout(() => {
+        const el = document.getElementById("pilot-results-section");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 350);
+    }
+  }, [location.state]);
 
   const handleStatusUpdate = async (newStatus) => {
     setStatusUpdating(true);
@@ -372,7 +437,9 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
     }
 
     try {
-      if (!String(offer.id).startsWith("demo-")) {
+      if (String(offer.id).startsWith("demo-")) {
+        tempDb.updatePilotOffer(offer.id, { status: newStatus });
+      } else {
         const { error } = await supabase
           .from("pilot_offers")
           .update({ status: newStatus, updated_at: new Date().toISOString() })
@@ -639,7 +706,7 @@ function PilotDetailView({ offer, currentUser, profile, onUpdated }) {
 
         {/* Pilot Results / Evaluation */}
         {(offerData.status === "in_progress" || offerData.status === "completed") && (
-          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
+          <div id="pilot-results-section" className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm scroll-mt-6">
             <h3 className="text-sm font-bold text-slate-900 mb-3">Pilot Results &amp; Evaluation</h3>
             <PilotResultsView offer={offerData} offerId={offerData.id} isGovernment={isGovernment} onUpdated={onUpdated} />
           </div>
@@ -826,21 +893,61 @@ function MilestoneTracker({ pilotOfferId, isGovernment }) {
 
   const loadMilestones = useCallback(async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("pilot_milestones")
-      .select("*")
-      .eq("pilot_offer_id", pilotOfferId)
-      .order("due_date", { ascending: true, nullsFirst: false });
-    setMilestones(data || []);
-    setLoading(false);
+    try {
+      if (pilotOfferId && String(pilotOfferId).startsWith("demo-")) {
+        const ms = tempDb.getMilestones(pilotOfferId);
+        setMilestones(ms);
+        setLoading(false);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("pilot_milestones")
+        .select("*")
+        .eq("pilot_offer_id", pilotOfferId)
+        .order("due_date", { ascending: true, nullsFirst: false });
+      setMilestones(data || []);
+    } catch (err) {
+      console.warn("Milestones load err:", err);
+    } finally {
+      setLoading(false);
+    }
   }, [pilotOfferId]);
 
-  useEffect(() => { loadMilestones(); }, [loadMilestones]);
+  useEffect(() => {
+    loadMilestones();
+    const unsub = subscribeTempDb(() => {
+      if (pilotOfferId && String(pilotOfferId).startsWith("demo-")) {
+        setMilestones(tempDb.getMilestones(pilotOfferId));
+      }
+    });
+    return unsub;
+  }, [loadMilestones, pilotOfferId]);
 
   const handleAddMilestone = async (e) => {
     e.preventDefault();
     if (!newMilestone.title) return;
     setBusyId("new");
+
+    if (pilotOfferId && String(pilotOfferId).startsWith("demo-")) {
+      tempDb.insertMilestone({
+        pilot_offer_id: pilotOfferId,
+        title: newMilestone.title,
+        description: newMilestone.description || null,
+        due_date: newMilestone.due_date || null,
+        deliverable: newMilestone.deliverable || null,
+        kpi: newMilestone.kpi || null,
+        payment_amount: newMilestone.payment_amount ? Number(newMilestone.payment_amount) : 0,
+        payment_status: "not_due",
+        status: "pending"
+      });
+      setMilestones(tempDb.getMilestones(pilotOfferId));
+      setNewMilestone({ title: "", description: "", due_date: "", deliverable: "", kpi: "", payment_amount: "" });
+      setShowAddForm(false);
+      setBusyId(null);
+      return;
+    }
+
     try {
       const { error } = await supabase.from("pilot_milestones").insert({
         pilot_offer_id: pilotOfferId,
@@ -863,6 +970,17 @@ function MilestoneTracker({ pilotOfferId, isGovernment }) {
 
   const submitMilestoneResult = async (id) => {
     setBusyId(id);
+
+    if (pilotOfferId && String(pilotOfferId).startsWith("demo-")) {
+      tempDb.updateMilestone(pilotOfferId, id, {
+        submitted_result: submitResults[id] || "",
+        status: "submitted"
+      });
+      setMilestones(tempDb.getMilestones(pilotOfferId));
+      setBusyId(null);
+      return;
+    }
+
     try {
       await supabase.from("pilot_milestones").update({
         submitted_result: submitResults[id] || "",
@@ -876,6 +994,14 @@ function MilestoneTracker({ pilotOfferId, isGovernment }) {
 
   const updateMilestoneStatus = async (id, status) => {
     setBusyId(id);
+
+    if (pilotOfferId && String(pilotOfferId).startsWith("demo-")) {
+      tempDb.updateMilestone(pilotOfferId, id, { status });
+      setMilestones(tempDb.getMilestones(pilotOfferId));
+      setBusyId(null);
+      return;
+    }
+
     try {
       await supabase.from("pilot_milestones").update({ status }).eq("id", id);
       await loadMilestones();
@@ -886,6 +1012,14 @@ function MilestoneTracker({ pilotOfferId, isGovernment }) {
 
   const updatePaymentStatus = async (id, payment_status) => {
     setBusyId(id);
+
+    if (pilotOfferId && String(pilotOfferId).startsWith("demo-")) {
+      tempDb.updateMilestone(pilotOfferId, id, { payment_status });
+      setMilestones(tempDb.getMilestones(pilotOfferId));
+      setBusyId(null);
+      return;
+    }
+
     try {
       await supabase.from("pilot_milestones").update({ payment_status }).eq("id", id);
       await loadMilestones();
@@ -1047,6 +1181,8 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(null);
   const [saveError, setSaveError] = useState(null);
+  const [dbStatus, setDbStatus] = useState("checking"); // 'checking' | 'connected' | 'not_found' | 'error'
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
   const [startupForm, setStartupForm] = useState({ outcome: "", success_metrics: "", kpi_actual: "" });
   const [govForm, setGovForm] = useState({
@@ -1078,12 +1214,38 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
           validation_summary: cached.validation_summary || "",
           validation_status: cached.validation_status || "not_applicable",
         });
+        if (cached.updated_at || cached.created_at) {
+          setLastSyncedAt(cached.updated_at || cached.created_at);
+        }
       }
     } catch (e) {
       console.warn("LocalStorage cache read notice:", e);
     }
 
-    // 2. Query Supabase if not demo offerId
+    // Default verified result for demo-pilot-1 if no local override
+    if (!cached && offerId === "demo-pilot-1") {
+      const def = DEFAULT_PILOT_RESULT_1;
+      setResult(def);
+      setStartupForm({
+        outcome: def.outcome || "",
+        success_metrics: def.success_metrics || "",
+        kpi_actual: def.kpi_actual || "",
+      });
+      setGovForm({
+        government_feedback: def.government_feedback || "",
+        kpi_target: def.kpi_target || "",
+        final_recommendation: def.final_recommendation || "scale",
+        scale_up_pathway: def.scale_up_pathway || "marketplace",
+        validator_name: def.validator_name || "",
+        validation_summary: def.validation_summary || "",
+        validation_status: def.validation_status || "passed",
+      });
+      setDbStatus("connected");
+      setLoading(false);
+      return;
+    }
+
+    // 2. Query Supabase database if real UUID offerId
     if (offerId && !String(offerId).startsWith("demo-")) {
       try {
         const { data, error } = await supabase
@@ -1092,48 +1254,72 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
           .eq("pilot_offer_id", offerId)
           .maybeSingle();
 
-        if (!error && data) {
-          setResult(data);
-          setStartupForm({
-            outcome: data.outcome || "",
-            success_metrics: data.success_metrics || "",
-            kpi_actual: data.kpi_actual || "",
-          });
-          setGovForm({
-            government_feedback: data.government_feedback || "",
-            kpi_target: data.kpi_target || "",
-            final_recommendation: data.final_recommendation || "scale",
-            scale_up_pathway: data.scale_up_pathway || "within_department",
-            validator_name: data.validator_name || "",
-            validation_summary: data.validation_summary || "",
-            validation_status: data.validation_status || "not_applicable",
-          });
-          try {
-            localStorage.setItem(`udyam_pilot_result_${offerId}`, JSON.stringify(data));
-          } catch (e) {
-            console.warn("LocalStorage cache write notice:", e);
+        if (error) {
+          console.warn("Load pilot results DB notice:", error);
+          if (error.code === "42P01" || error.message?.toLowerCase().includes("does not exist")) {
+            setDbStatus("not_found");
+          } else {
+            setDbStatus("error");
+          }
+        } else {
+          setDbStatus("connected");
+          if (data) {
+            setResult(data);
+            setStartupForm({
+              outcome: data.outcome || "",
+              success_metrics: data.success_metrics || "",
+              kpi_actual: data.kpi_actual || "",
+            });
+            setGovForm({
+              government_feedback: data.government_feedback || "",
+              kpi_target: data.kpi_target || "",
+              final_recommendation: data.final_recommendation || "scale",
+              scale_up_pathway: data.scale_up_pathway || "within_department",
+              validator_name: data.validator_name || "",
+              validation_summary: data.validation_summary || "",
+              validation_status: data.validation_status || "not_applicable",
+            });
+            setLastSyncedAt(data.updated_at || data.created_at);
+            try {
+              localStorage.setItem(`udyam_pilot_result_${offerId}`, JSON.stringify(data));
+            } catch (e) {
+              console.warn("LocalStorage cache write notice:", e);
+            }
           }
         }
       } catch (err) {
-        console.warn("Load pilot results notice:", err);
+        console.warn("Load pilot results network notice:", err);
+        setDbStatus("error");
       }
+    } else {
+      setDbStatus("connected");
     }
     setLoading(false);
   }, [offerId]);
 
   useEffect(() => { loadResult(); }, [loadResult]);
 
-  const upsert = async (payload) => {
+  const upsert = async (payload, isStartup = false) => {
+    // Form validation for startup submission
+    if (isStartup) {
+      if (!payload.outcome?.trim() && !payload.success_metrics?.trim() && !payload.kpi_actual?.trim()) {
+        setSaveError("Please enter an outcome summary, success metrics, or actual KPI result before submitting.");
+        return;
+      }
+    }
+
     setSaving(true);
     setSaveSuccess(null);
     setSaveError(null);
+
+    const nowIso = new Date().toISOString();
 
     // Optimistic local state update
     const mergedResult = {
       ...(result || {}),
       pilot_offer_id: offerId,
       ...payload,
-      updated_at: new Date().toISOString()
+      updated_at: nowIso
     };
     setResult(mergedResult);
     try {
@@ -1144,23 +1330,86 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
 
     try {
       if (offerId && !String(offerId).startsWith("demo-")) {
-        const { data, error } = await supabase
+        // Step 1: Check if record exists in public.pilot_results
+        const { data: existing, error: checkError } = await supabase
           .from("pilot_results")
-          .upsert(
-            { pilot_offer_id: offerId, ...payload, updated_at: new Date().toISOString() },
-            { onConflict: "pilot_offer_id" }
-          )
-          .select()
+          .select("id")
+          .eq("pilot_offer_id", offerId)
           .maybeSingle();
 
-        if (error) {
-          console.error("Upsert pilot_results error:", error);
-          setSaveError(`Database notice: ${error.message || "Could not save to database"}. (Local preview saved)`);
+        if (checkError && (checkError.code === "42P01" || checkError.message?.toLowerCase().includes("does not exist"))) {
+          setDbStatus("not_found");
+          setSaveError("Database table 'public.pilot_results' was not found in Supabase. Please execute the SQL migration in supabase/pilot_results_fix.sql in your Supabase SQL Editor.");
+          setSaving(false);
+          return;
+        }
+
+        let savedData = null;
+        let saveErrorResult = null;
+
+        if (existing?.id) {
+          // Step 2a: Update existing record
+          const { data: uData, error: uError } = await supabase
+            .from("pilot_results")
+            .update({
+              ...payload,
+              updated_at: nowIso
+            })
+            .eq("pilot_offer_id", offerId)
+            .select()
+            .maybeSingle();
+
+          savedData = uData;
+          saveErrorResult = uError;
         } else {
-          if (data) setResult(data);
-          setSaveSuccess(isGovernment ? "Evaluation & Decision saved successfully!" : "Final results submitted successfully!");
+          // Step 2b: Insert new record
+          const { data: iData, error: iError } = await supabase
+            .from("pilot_results")
+            .insert({
+              pilot_offer_id: offerId,
+              ...payload,
+              updated_at: nowIso
+            })
+            .select()
+            .maybeSingle();
+
+          if (iError && (iError.code === "23505" || iError.message?.includes("duplicate key") || iError.message?.includes("unique"))) {
+            // Fallback to update on race condition
+            const { data: rData, error: rError } = await supabase
+              .from("pilot_results")
+              .update({
+                ...payload,
+                updated_at: nowIso
+              })
+              .eq("pilot_offer_id", offerId)
+              .select()
+              .maybeSingle();
+            savedData = rData;
+            saveErrorResult = rError;
+          } else {
+            savedData = iData;
+            saveErrorResult = iError;
+          }
+        }
+
+        if (saveErrorResult) {
+          console.error("Save to pilot_results database error:", saveErrorResult);
+          setSaveError(`Database notice: ${saveErrorResult.message || "Failed to persist to database"}. (Local preview saved)`);
+          setDbStatus("error");
+        } else {
+          if (savedData) setResult(savedData);
+          setDbStatus("connected");
+          setLastSyncedAt(nowIso);
+          setSaveSuccess(
+            isGovernment
+              ? "✓ Evaluation & Decision successfully saved to Supabase database (public.pilot_results)!"
+              : "✓ Final results successfully submitted and stored in Supabase database (public.pilot_results)!"
+          );
         }
       } else {
+        // Demo mode
+        setDbStatus("connected");
+        setLastSyncedAt(nowIso);
         setSaveSuccess(isGovernment ? "Evaluation & Decision saved successfully!" : "Final results submitted successfully!");
       }
 
@@ -1181,7 +1430,8 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
       onUpdated?.();
     } catch (err) {
       console.error("Save error:", err);
-      setSaveError(err.message || "Failed to save evaluation.");
+      setSaveError(err.message || "Failed to save to database.");
+      setDbStatus("error");
     } finally {
       setSaving(false);
     }
@@ -1191,9 +1441,53 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
 
   return (
     <div className="space-y-6">
+      {/* Database Connection Status Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-600">Database:</span>
+          {dbStatus === "connected" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              Supabase connected (public.pilot_results)
+            </span>
+          )}
+          {dbStatus === "not_found" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+              <AlertTriangle className="w-3 h-3 text-amber-600" />
+              Table Pending in Supabase
+            </span>
+          )}
+          {dbStatus === "error" && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+              <AlertTriangle className="w-3 h-3 text-rose-600" />
+              Database Notice
+            </span>
+          )}
+        </div>
+        {lastSyncedAt && (
+          <span className="text-[11px] text-slate-400 font-medium flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+            Last synced to DB: {new Date(lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+        )}
+      </div>
+
+      {/* Database Setup Required Notice if table not found */}
+      {dbStatus === "not_found" && (
+        <div className="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1.5">
+          <p className="font-bold flex items-center gap-1.5 text-amber-800">
+            <Database className="w-4 h-4 text-amber-600" />
+            Supabase Database Table Setup Required
+          </p>
+          <p className="text-amber-800 leading-relaxed">
+            The table <code className="px-1.5 py-0.5 bg-amber-100 rounded text-[11px] font-mono font-bold">public.pilot_results</code> is not yet present in your Supabase project. Open your Supabase Dashboard &rarr; <strong>SQL Editor</strong>, and run the script located at <code className="px-1.5 py-0.5 bg-amber-100 rounded text-[11px] font-mono font-bold">supabase/pilot_results_fix.sql</code> to create it with one click.
+          </p>
+        </div>
+      )}
+
       {/* Success / Error notification alerts */}
       {saveSuccess && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2">
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl flex items-center gap-2 shadow-sm animate-in fade-in duration-200">
           <Check className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>{saveSuccess}</span>
         </div>
@@ -1209,45 +1503,52 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
       <div>
         <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Startup: Final Results</h4>
         {!isGovernment ? (
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <textarea
               value={startupForm.outcome}
               onChange={(e) => setStartupForm({ ...startupForm, outcome: e.target.value })}
               placeholder="Outcome / implementation summary"
               rows={2}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none focus:border-indigo-500"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
             />
             <textarea
               value={startupForm.success_metrics}
               onChange={(e) => setStartupForm({ ...startupForm, success_metrics: e.target.value })}
               placeholder="Success metrics / evidence"
               rows={2}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none focus:border-indigo-500"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
             />
             <input
               value={startupForm.kpi_actual}
               onChange={(e) => setStartupForm({ ...startupForm, kpi_actual: e.target.value })}
               placeholder="Actual KPI result (e.g. 37% reduction)"
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
             />
-            <button
-              type="button"
-              onClick={() => upsert(startupForm)}
-              disabled={saving}
-              className="px-4 py-2.5 bg-[#0B192C] hover:bg-[#1E3E62] text-white text-xs font-semibold rounded-xl disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm cursor-pointer"
-            >
-              {saving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Submitting Results...</span>
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4" />
-                  <span>Submit Final Results</span>
-                </>
+            <div className="pt-1 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => upsert(startupForm, true)}
+                disabled={saving}
+                className="px-5 py-2.5 bg-[#0B192C] hover:bg-[#1E3E62] text-white text-xs font-bold rounded-xl disabled:opacity-50 transition-all flex items-center gap-2 shadow-sm cursor-pointer"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving to Database...</span>
+                  </>
+                ) : (
+                  <>
+                    <Database className="w-4 h-4 text-cyan-400" />
+                    <span>Submit Final Results</span>
+                  </>
+                )}
+              </button>
+              {lastSyncedAt && !saving && (
+                <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" /> Database Synced
+                </span>
               )}
-            </button>
+            </div>
           </div>
         ) : (
           <div className="text-sm text-slate-700 space-y-1.5 bg-slate-50/60 p-4 rounded-xl border border-slate-100">
@@ -1267,14 +1568,14 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
               value={govForm.kpi_target}
               onChange={(e) => setGovForm({ ...govForm, kpi_target: e.target.value })}
               placeholder="KPI target (e.g. 30% reduction in processing time)"
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
             />
             <textarea
               value={govForm.government_feedback}
               onChange={(e) => setGovForm({ ...govForm, government_feedback: e.target.value })}
               placeholder="Government feedback"
               rows={2}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none focus:border-emerald-500"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-xl outline-none resize-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
             />
 
             <div className="pt-1">
@@ -1343,25 +1644,30 @@ function PilotResultsView({ offer, offerId, isGovernment, onUpdated }) {
               )}
             </div>
 
-            <div className="pt-2">
+            <div className="pt-2 flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => upsert(govForm)}
+                onClick={() => upsert(govForm, false)}
                 disabled={saving}
                 className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-all shadow-sm flex items-center gap-2 cursor-pointer"
               >
                 {saving ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Saving Evaluation...</span>
+                    <span>Saving Evaluation to Database...</span>
                   </>
                 ) : (
                   <>
-                    <Save className="w-4 h-4" />
+                    <Database className="w-4 h-4" />
                     <span>Save Evaluation &amp; Decision</span>
                   </>
                 )}
               </button>
+              {lastSyncedAt && !saving && (
+                <span className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" /> Database Synced
+                </span>
+              )}
             </div>
           </div>
         ) : (

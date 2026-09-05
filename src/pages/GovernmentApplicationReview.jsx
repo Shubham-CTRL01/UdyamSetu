@@ -11,6 +11,8 @@ import { analyzeApplication, getOrCreateMatchScore, fetchMatchScore } from "../l
 import { createNotification, applicationStatusColor, formatCurrency, formatDate } from "../lib/utils";
 import AIMatchPanel from "../components/AIMatchPanel";
 import PilotOfferForm from "../components/PilotOfferForm";
+import { DEFAULT_APPLICATIONS, DEFAULT_CHALLENGES, DEFAULT_STARTUP_PROFILE } from "../lib/demoData";
+import { tempDb } from "../lib/tempDb";
 
 export default function GovernmentApplicationReview() {
   const { applicationId } = useParams();
@@ -32,6 +34,29 @@ export default function GovernmentApplicationReview() {
     if (!applicationId || !user) return;
     setLoading(true);
     try {
+      if (applicationId.startsWith("demo-") || (user?.id && user.id.startsWith("demo-"))) {
+        const demoApp = tempDb.getApplicationById(applicationId) || DEFAULT_APPLICATIONS[0];
+        const demoCh = demoApp.challenges || DEFAULT_CHALLENGES[0];
+        setApplication(demoApp);
+        setChallenge(demoCh);
+        setStartupProfile(DEFAULT_STARTUP_PROFILE);
+        setMatchData({
+          overall_score: 92,
+          problem_fit: 94,
+          technical_fit: 91,
+          impact_score: 95,
+          feasibility_score: 88,
+          timeline_score: 90,
+          budget_fit: 92,
+          capability_score: 93,
+          analysis_text: "ApexVision AI demonstrates exceptional capability in edge computing and real-time computer vision tailored for railway safety. TRL-6+ hardware architecture directly fulfills Northern Railway Division specifications.",
+          concerns_text: "Recommend phased deployment with 4 locomotives before network-wide scale-up. Vibration dampening certification required for bogie-mount sensor boxes.",
+          scorer_version: "v2.1-sovereign"
+        });
+        setLoading(false);
+        return;
+      }
+
       // Fetch application with challenge details
       const { data: appData, error: appErr } = await supabase
         .from("challenge_applications")
@@ -77,6 +102,23 @@ export default function GovernmentApplicationReview() {
     setAnalyzing(true);
     setError("");
     try {
+      if (applicationId.startsWith("demo-")) {
+        setMatchData({
+          overall_score: 92,
+          problem_fit: 94,
+          technical_fit: 91,
+          impact_score: 95,
+          feasibility_score: 88,
+          timeline_score: 90,
+          budget_fit: 92,
+          capability_score: 93,
+          analysis_text: "ApexVision AI demonstrates exceptional capability in edge computing and real-time computer vision tailored for railway safety. TRL-6+ hardware architecture directly fulfills Northern Railway Division specifications.",
+          concerns_text: "Recommend phased deployment with 4 locomotives before network-wide scale-up. Vibration dampening certification required for bogie-mount sensor boxes.",
+          scorer_version: "v2.1-sovereign"
+        });
+        return;
+      }
+
       const result = await getOrCreateMatchScore(
         supabase,
         applicationId,
@@ -105,6 +147,16 @@ export default function GovernmentApplicationReview() {
     if (!application || !challenge) return;
     setAnalyzing(true);
     try {
+      if (applicationId.startsWith("demo-")) {
+        setMatchData((prev) => ({
+          ...prev,
+          overall_score: 93,
+          problem_fit: 95,
+          updated_at: new Date().toISOString()
+        }));
+        return;
+      }
+
       const result = await analyzeApplication(challenge, application, startupProfile);
       // Save fresh result
       const { error: saveErr } = await supabase.from("ai_match_scores").upsert({
@@ -148,6 +200,14 @@ export default function GovernmentApplicationReview() {
   const updateApplicationStatus = async (newStatus) => {
     if (!application) return;
     setStatusLoading(true);
+
+    if (applicationId.startsWith("demo-") || (user?.id && user.id.startsWith("demo-"))) {
+      tempDb.updateApplication(applicationId, { status: newStatus });
+      setApplication((prev) => ({ ...prev, status: newStatus }));
+      setStatusLoading(false);
+      return;
+    }
+
     try {
       const { error: err } = await supabase
         .from("challenge_applications")
@@ -171,6 +231,33 @@ export default function GovernmentApplicationReview() {
     if (!application || !challenge) return;
     setPilotFormLoading(true);
     setError("");
+
+    if (applicationId.startsWith("demo-") || (user?.id && user.id.startsWith("demo-"))) {
+      tempDb.insertPilotOffer({
+        challenge_id: challenge.id,
+        application_id: application.id,
+        government_id: user?.id || "demo-govt-railways-001",
+        startup_id: application.startup_id || "demo-startup-apex-001",
+        objective: formData.objective || "Live pilot deployment",
+        location: formData.location || "Northern Railway Zone",
+        duration: formData.duration || 180,
+        proposed_budget: formData.proposed_budget || 15000000,
+        start_date: formData.start_date || "2026-08-01",
+        deliverables: formData.deliverables || "Inspection telemetry and model evaluation",
+        success_criteria: formData.success_criteria || ">90% detection accuracy",
+        beneficiaries: formData.beneficiaries,
+        special_conditions: formData.special_conditions,
+        additional_notes: formData.additional_notes,
+        status: "proposed"
+      });
+      tempDb.updateApplication(applicationId, { status: "Pilot Offered" });
+      setApplication((prev) => ({ ...prev, status: "Pilot Offered" }));
+      setShowPilotForm(false);
+      setPilotFormLoading(false);
+      navigate("/pilot-management");
+      return;
+    }
+
     try {
       const { error: err } = await supabase.from("pilot_offers").insert({
         challenge_id: challenge.id,

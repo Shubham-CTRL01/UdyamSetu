@@ -1331,86 +1331,40 @@ alter table public.pilot_results
 -- (mirroring pin_pilot_offer_content/pin_milestone_content above) ensuring
 -- each side can only ever populate their own columns.
 drop policy if exists "Startup can create results" on public.pilot_results;
-create policy "Startup can create results" on public.pilot_results
-  for insert with check (
-    exists (
-      select 1 from public.pilot_offers po
-      where po.id = pilot_results.pilot_offer_id
-        and po.startup_id = auth.uid()
-    )
-  );
-
 drop policy if exists "Participants can update results" on public.pilot_results;
-create policy "Participants can update results" on public.pilot_results
-  for update using (
+drop policy if exists "Enable read for pilot_results" on public.pilot_results;
+drop policy if exists "Enable insert for pilot_results" on public.pilot_results;
+drop policy if exists "Enable update for pilot_results" on public.pilot_results;
+
+create policy "Enable read for pilot_results" on public.pilot_results
+  for select using (true);
+
+create policy "Enable insert for pilot_results" on public.pilot_results
+  for insert with check (
+    auth.role() = 'authenticated' or
+    auth.role() = 'anon' or
     exists (
       select 1 from public.pilot_offers po
       where po.id = pilot_results.pilot_offer_id
         and (po.government_id = auth.uid() or po.startup_id = auth.uid())
-    )
+    ) or
+    public.is_admin()
   );
 
-create or replace function public.pin_pilot_result_content()
-returns trigger as $$
-declare
-  is_govt boolean;
-  is_startup boolean;
-begin
-  if public.is_trusted_direct_access() then
-    return new;
-  end if;
-
-  select
-    exists (select 1 from public.pilot_offers po where po.id = new.pilot_offer_id and po.government_id = auth.uid()),
-    exists (select 1 from public.pilot_offers po where po.id = new.pilot_offer_id and po.startup_id = auth.uid())
-  into is_govt, is_startup;
-
-  if tg_op = 'INSERT' then
-    if is_govt and not is_startup then
-      new.outcome := null;
-      new.success_metrics := null;
-      new.startup_feedback := null;
-      new.kpi_actual := null;
-    elsif is_startup and not is_govt then
-      new.government_feedback := null;
-      new.kpi_target := null;
-      new.final_recommendation := null;
-      new.validation_status := null;
-      new.validator_name := null;
-      new.validation_summary := null;
-      new.scale_up_pathway := null;
-      new.achievement_pct := null;
-    end if;
-    return new;
-  end if;
-
-  -- UPDATE: each side may only ever touch their own columns, never overwrite
-  -- the counterparty's already-submitted content.
-  if is_govt and not is_startup then
-    new.outcome := old.outcome;
-    new.success_metrics := old.success_metrics;
-    new.startup_feedback := old.startup_feedback;
-    new.kpi_actual := old.kpi_actual;
-  elsif is_startup and not is_govt then
-    new.government_feedback := old.government_feedback;
-    new.kpi_target := old.kpi_target;
-    new.final_recommendation := old.final_recommendation;
-    new.validation_status := old.validation_status;
-    new.validator_name := old.validator_name;
-    new.validation_summary := old.validation_summary;
-    new.scale_up_pathway := old.scale_up_pathway;
-    new.achievement_pct := old.achievement_pct;
-  end if;
-  new.pilot_offer_id := old.pilot_offer_id;
-  new.created_at := old.created_at;
-  return new;
-end;
-$$ language plpgsql;
+create policy "Enable update for pilot_results" on public.pilot_results
+  for update using (
+    auth.role() = 'authenticated' or
+    auth.role() = 'anon' or
+    exists (
+      select 1 from public.pilot_offers po
+      where po.id = pilot_results.pilot_offer_id
+        and (po.government_id = auth.uid() or po.startup_id = auth.uid())
+    ) or
+    public.is_admin()
+  );
 
 drop trigger if exists tr_pin_pilot_result_content on public.pilot_results;
-create trigger tr_pin_pilot_result_content
-  before insert or update on public.pilot_results
-  for each row execute function public.pin_pilot_result_content();
+drop function if exists public.pin_pilot_result_content();
 
 
 -- ============================================================

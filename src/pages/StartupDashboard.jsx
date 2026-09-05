@@ -13,6 +13,9 @@ import {
 } from "lucide-react";
 import { pilotStatusColor, pilotStatusLabel, formatCurrency, formatDate } from "../lib/utils";
 import StartupAIMatchViewer from "../components/StartupAIMatchViewer";
+import { DEFAULT_APPLICATIONS } from "../lib/demoData";
+import { DEFAULT_PILOT_OFFERS } from "./PilotManagement";
+import { tempDb, subscribeTempDb } from "../lib/tempDb";
 
 const DEFAULT_CHALLENGES = [
   {
@@ -202,14 +205,14 @@ export default function StartupDashboard() {
         .order("created_at", { ascending: false });
 
       if (cErr) console.warn("Challenges error:", cErr.message);
-      setChallenges((challengesData && challengesData.length > 0) ? challengesData : DEFAULT_CHALLENGES);
+      setChallenges((challengesData && challengesData.length > 0) ? challengesData : tempDb.getChallenges());
 
-      // Demo accounts use human-readable ids (e.g. "demo-startup-apex-001"),
-      // not real uuids, so any query filtered by user.id would just 400
-      // against these uuid columns — skip straight to empty/demo state.
+      // In demo mode, load directly from shared persistent Temp Database
       if (user.id.startsWith("demo-")) {
-        setApplications([]);
-        setPilotOffers([]);
+        setChallenges(tempDb.getChallenges());
+        setApplications(tempDb.getApplicationsByStartup(user.id));
+        setPilotOffers(tempDb.getPilotOffers());
+        setLoading(false);
         return;
       }
 
@@ -235,9 +238,21 @@ export default function StartupDashboard() {
       setPilotOffers(pilotData || []);
     } catch (err) {
       console.warn("Load data error:", err);
-      setChallenges(DEFAULT_CHALLENGES);
+      setChallenges(tempDb.getChallenges());
     } finally {
       setLoading(false);
+    }
+  }, [user]);
+
+  // Subscribe to Temp Database updates across personas
+  useEffect(() => {
+    if (user?.id?.startsWith("demo-")) {
+      const unsub = subscribeTempDb(() => {
+        setChallenges(tempDb.getChallenges());
+        setApplications(tempDb.getApplicationsByStartup(user.id));
+        setPilotOffers(tempDb.getPilotOffers());
+      });
+      return unsub;
     }
   }, [user]);
 

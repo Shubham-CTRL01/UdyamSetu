@@ -3,8 +3,10 @@ import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import {
   Lock, Eye, EyeOff, Landmark, Rocket, KeyRound,
-  BadgeCheck, ShieldCheck, RefreshCw, AlertCircle, Loader2, ArrowLeft
+  BadgeCheck, ShieldCheck, RefreshCw, AlertCircle, Loader2, ArrowLeft,
+  BrainCircuit, FileCheck, Target, Award, ArrowRight, Zap
 } from "lucide-react";
+import { WORKFLOW_STAGES } from "../lib/demoData";
 
 function TrackBadge({ icon: Icon, label, active, onClick, color }) {
   return (
@@ -99,7 +101,8 @@ const SECTOR_NAMES_HI = {
 
 const TRANSLATIONS = {
   en: {
-    backHome: "← Back to Home",
+    backHome: "Back to Home",
+    homePill: "Home",
     sovereignBadge: "Official Sovereign Digital Exchange Gateway",
     heroTitle: "Bridging National Governance & High-Growth Startups",
     heroDesc: "A unified, interoperable exchange enabling public sector departments to pilot, procure, and scale verified indigenous innovations with zero friction.",
@@ -213,9 +216,16 @@ const TRANSLATIONS = {
     errFounderName: "Founder / Representative Name is required.",
     errDeptName: "Department/Ministry name is required.",
     errStartupName: "Startup name is required.",
+
+    demoWorkflowTitle: "Guided Demo Workflow (Challenge Proposal → Pilot Completion)",
+    demoWorkflowSub: "Simulate each phase of sovereign public innovation with pre-configured institutional accounts.",
+    demoWorkflowBadge: "Interactive Showcase",
+    stageLabel: "Stage",
+    runStage: "Launch Stage",
   },
   hi: {
-    backHome: "← मुखपृष्ठ पर वापस जाएं",
+    backHome: "मुखपृष्ठ पर वापस जाएं",
+    homePill: "मुखपृष्ठ",
     sovereignBadge: "आधिकारिक संप्रभु डिजिटल एक्सचेंज प्रवेश द्वार",
     heroTitle: "राष्ट्रीय सुशासन एवं अग्रणी स्टार्टअप्स का सेतु",
     heroDesc: "एक एकीकृत, अंतर-संचालनीय विनिमय जो सार्वजनिक क्षेत्र के विभागों को बिना किसी बाधा के सत्यापित स्वदेशी नवाचारों का परीक्षण, अधिप्राप्ति और विस्तार करने में सक्षम बनाता है।",
@@ -329,7 +339,22 @@ const TRANSLATIONS = {
     errFounderName: "संस्थापक / प्रतिनिधि का नाम आवश्यक है।",
     errDeptName: "विभाग/मंत्रालय का नाम आवश्यक है।",
     errStartupName: "स्टार्टअप का नाम आवश्यक है।",
+
+    demoWorkflowTitle: "मार्गदर्शित डेमो कार्यप्रवाह (चुनौती प्रस्ताव → पायलट पूर्णता)",
+    demoWorkflowSub: "पूर्व-कॉन्फ़िगर संस्थागत खातों के साथ संप्रभु सार्वजनिक नवाचार के प्रत्येक चरण का अनुकरण करें।",
+    demoWorkflowBadge: "इंटरैक्टिव शोकेस",
+    stageLabel: "चरण",
+    runStage: "चरण शुरू करें",
   }
+};
+
+const STAGE_ICONS = {
+  Landmark,
+  Rocket,
+  BrainCircuit,
+  FileCheck,
+  Target,
+  Award,
 };
 
 export default function LoginPage() {
@@ -437,6 +462,22 @@ export default function LoginPage() {
     }, 400);
   };
 
+  const [activeWorkflowStage, setActiveWorkflowStage] = useState(null);
+
+  const handleExecuteWorkflowStage = (stage) => {
+    setActiveWorkflowStage(stage.step);
+    setError("");
+    setSuccess(
+      lang === "hi"
+        ? `चरण ${stage.step}: ${stage.titleHi || stage.title} प्रारंभ किया जा रहा है...`
+        : `Launching Stage ${stage.step}: ${stage.title}...`
+    );
+    signInDemo(stage.demoKey || (stage.role === "government" ? "janparichay" : "startup"));
+    setTimeout(() => {
+      navigate(stage.path, { state: stage.state });
+    }, 350);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
@@ -529,18 +570,26 @@ export default function LoginPage() {
           </svg>
         </div>
         <div className="relative z-10">
-          <Link to="/" className="inline-flex items-center gap-2 text-slate-300 hover:text-white text-xs font-medium mb-4 transition-colors">
-            {t.backHome}
-          </Link>
-          <div className="flex items-center gap-3 mb-4">
-            <img src="/logo.png" alt="UdyamSetu" className="w-11 h-11 rounded-xl bg-white p-1 object-contain shadow-md" />
-            <div>
-              <span className="text-white font-extrabold text-lg tracking-tight block leading-none" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
-                UdyamSetu
-              </span>
-              <span className="text-slate-300 text-[11px] font-medium">उद्यम सेतु</span>
-            </div>
+          <div className="flex items-center justify-between gap-4 mb-5">
+            <Link to="/" className="flex items-center gap-3 group">
+              <img src="/logo.png" alt="UdyamSetu" className="w-11 h-11 rounded-xl bg-white p-1 object-contain shadow-md transition-transform group-hover:scale-105" />
+              <div>
+                <span className="text-white font-extrabold text-lg tracking-tight block leading-none" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+                  UdyamSetu
+                </span>
+                <span className="text-slate-300 text-[11px] font-medium">उद्यम सेतु</span>
+              </div>
+            </Link>
+
+            <Link
+              to="/"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-slate-200 hover:text-white text-xs font-semibold transition-all shadow-xs group"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 text-slate-300 group-hover:-translate-x-0.5 transition-transform" />
+              <span>{t.homePill}</span>
+            </Link>
           </div>
+
           <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/15 px-3.5 py-1.5 rounded-full">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <span className="text-[11px] text-slate-200 tracking-widest font-semibold uppercase">{t.sovereignBadge}</span>
@@ -589,36 +638,48 @@ export default function LoginPage() {
       {/* RIGHT: Auth pane */}
       <div className="flex-1 bg-slate-50 flex flex-col justify-between p-6 sm:p-10 lg:p-12 xl:p-16 overflow-y-auto">
         {/* Top bar */}
-        <div className="flex items-center justify-between gap-4 pb-6 border-b border-slate-200">
-          <div className="flex items-center gap-3 text-slate-500 text-xs font-medium">
-            <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-6 border-b border-slate-200">
+          <div className="flex items-center gap-3">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 hover:text-slate-900 text-xs font-bold transition-all shadow-2xs group shrink-0"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 text-slate-500 group-hover:-translate-x-0.5 transition-transform" />
+              <span>{t.backHome}</span>
+            </Link>
+
+            <div className="hidden sm:flex items-center gap-1.5 text-slate-500 text-xs font-medium pl-2 border-l border-slate-200">
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
               <span>{t.gatewayBadge}</span>
             </div>
-            <span className="text-slate-300 hidden sm:inline">|</span>
-            <Link to="/security-policy" className="hidden sm:inline text-[11px] font-semibold text-slate-500 hover:text-indigo-600 transition-colors">
-              {t.secPolicy}
-            </Link>
-            <span className="text-slate-300 hidden sm:inline">·</span>
-            <Link to="/terms-of-access" className="hidden sm:inline text-[11px] font-semibold text-slate-500 hover:text-indigo-600 transition-colors">
-              {t.termsOfAccess}
-            </Link>
           </div>
 
-          {/* Bilingual Language Selector */}
-          <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5 border border-slate-200 shadow-2xs">
-            {["en", "hi"].map((l) => (
-              <button
-                key={l}
-                type="button"
-                onClick={() => handleLangChange(l)}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                  lang === l ? "bg-white text-slate-900 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                {l === "en" ? "English" : "हिन्दी"}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-2 text-xs">
+              <Link to="/security-policy" className="text-[11px] font-semibold text-slate-500 hover:text-indigo-600 transition-colors">
+                {t.secPolicy}
+              </Link>
+              <span className="text-slate-300">·</span>
+              <Link to="/terms-of-access" className="text-[11px] font-semibold text-slate-500 hover:text-indigo-600 transition-colors">
+                {t.termsOfAccess}
+              </Link>
+            </div>
+
+            {/* Bilingual Language Selector */}
+            <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5 border border-slate-200 shadow-2xs">
+              {["en", "hi"].map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => handleLangChange(l)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                    lang === l ? "bg-white text-slate-900 shadow-sm border border-slate-200/60" : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  {l === "en" ? "English" : "हिन्दी"}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -712,6 +773,83 @@ export default function LoginPage() {
                     <span>{t.startupIndiaBtn}</span>
                   </div>
                 </button>
+              </div>
+
+              {/* Guided End-to-End Demo Workflow Guide */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900 via-[#0B192C] to-[#1E3E62] text-white border border-slate-700/80 shadow-md">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-500/30 border border-indigo-400/40 flex items-center justify-center">
+                      <Zap className="w-4 h-4 text-amber-400 animate-pulse" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-white tracking-tight leading-tight" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+                        {t.demoWorkflowTitle}
+                      </h3>
+                      <p className="text-[11px] text-slate-300 mt-0.5">
+                        {t.demoWorkflowSub}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30 uppercase tracking-wider">
+                    {t.demoWorkflowBadge}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-2">
+                  {WORKFLOW_STAGES.map((stage) => {
+                    const IconComp = STAGE_ICONS[stage.icon] || Rocket;
+                    const isRunning = activeWorkflowStage === stage.step;
+                    const stageTitle = lang === "hi" ? (stage.titleHi || stage.title) : stage.title;
+                    const stageCaption = lang === "hi" ? (stage.captionHi || stage.caption) : stage.caption;
+                    const stageRoleBadge = lang === "hi" ? (stage.badgeHi || stage.badge) : stage.badge;
+
+                    return (
+                      <button
+                        key={stage.id}
+                        type="button"
+                        onClick={() => handleExecuteWorkflowStage(stage)}
+                        disabled={isRunning}
+                        className={`group relative text-left p-3 rounded-xl border transition-all duration-200 cursor-pointer flex flex-col justify-between ${
+                          isRunning
+                            ? "bg-indigo-900/60 border-indigo-400 ring-2 ring-indigo-400/40"
+                            : "bg-white/[0.08] hover:bg-white/[0.14] border-white/15 hover:border-white/30"
+                        }`}
+                      >
+                        <div>
+                          <div className="flex items-center justify-between gap-1.5 mb-2">
+                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-white/20 text-[10px] font-black text-white">
+                              {stage.step}
+                            </span>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${stage.badgeColor}`}>
+                              {stageRoleBadge}
+                            </span>
+                          </div>
+
+                          <div className="flex items-start gap-2 mb-1.5">
+                            <IconComp className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                            <div className="font-bold text-xs text-white group-hover:text-amber-300 transition-colors leading-snug">
+                              {stageTitle}
+                            </div>
+                          </div>
+
+                          <p className="text-[10px] text-slate-300 line-clamp-2 leading-relaxed mb-2">
+                            {stageCaption}
+                          </p>
+                        </div>
+
+                        <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] font-bold text-indigo-200 group-hover:text-white">
+                          <span>{isRunning ? "Launching..." : t.runStage}</span>
+                          {isRunning ? (
+                            <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                          ) : (
+                            <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Divider */}

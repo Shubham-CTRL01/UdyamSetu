@@ -57,6 +57,7 @@ export function pilotStatusColor(status) {
     accepted: "bg-emerald-100 text-emerald-800 border-emerald-200",
     declined: "bg-rose-100 text-rose-800 border-rose-200",
     in_progress: "bg-cyan-100 text-cyan-800 border-cyan-200",
+    "Pilot Active": "bg-cyan-100 text-cyan-800 border-cyan-200",
     completed: "bg-slate-100 text-slate-800 border-slate-300",
     cancelled: "bg-gray-100 text-gray-800 border-gray-200",
   };
@@ -73,6 +74,7 @@ export function pilotStatusLabel(status) {
     accepted: "Accepted",
     declined: "Declined",
     in_progress: "In Progress",
+    "Pilot Active": "Pilot Active",
     completed: "Completed",
     cancelled: "Cancelled",
   };
