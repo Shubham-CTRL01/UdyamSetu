@@ -113,6 +113,43 @@ export default function PilotManagement() {
 
   const isGovernment = profile?.role === "government";
 
+  // Load single offer detail — defined before the useEffect that references it
+  const loadOfferDetail = useCallback(async (offerId) => {
+    if (!offerId || !user) return;
+    setDetailLoading(true);
+    try {
+      if (offerId.startsWith("demo-")) {
+        const found = tempDb.getPilotOfferById(offerId) || DEFAULT_PILOT_OFFERS.find((o) => o.id === offerId) || DEFAULT_PILOT_OFFERS[0];
+        setSelectedOffer(found);
+        setDetailLoading(false);
+        return;
+      }
+
+      const { data, error: err } = await supabase
+        .from("pilot_offers")
+        .select(`
+          *,
+          challenges!inner(*),
+          applications:challenge_applications!left(*),
+          startup_profile:profiles!pilot_offers_startup_id_fkey(full_name, organization_name, sector, email, website, description, govt_level)
+        `)
+        .eq("id", offerId)
+        .single();
+
+      if (err || !data) {
+        const found = DEFAULT_PILOT_OFFERS.find((o) => o.id === offerId) || DEFAULT_PILOT_OFFERS[0];
+        setSelectedOffer(found);
+      } else {
+        setSelectedOffer(data);
+      }
+    } catch {
+      const found = DEFAULT_PILOT_OFFERS.find((o) => o.id === offerId) || DEFAULT_PILOT_OFFERS[0];
+      setSelectedOffer(found);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [user]);
+
   // Load list of pilot offers for the current user
   const loadOffers = useCallback(async () => {
     if (!user) return;
@@ -122,6 +159,7 @@ export default function PilotManagement() {
       if (user.id.startsWith("demo-")) {
         const demoOffers = tempDb.getPilotOffers();
         setOffers(demoOffers);
+        setLoading(false);
         return;
       }
 
@@ -173,42 +211,6 @@ export default function PilotManagement() {
 
     return () => unsubscribe();
   }, [user, navigate, loadOffers, pilotId, loadOfferDetail]);
-
-  // Load single offer detail
-  const loadOfferDetail = useCallback(async (offerId) => {
-    if (!offerId || !user) return;
-    setDetailLoading(true);
-    try {
-      if (offerId.startsWith("demo-")) {
-        const found = tempDb.getPilotOfferById(offerId) || DEFAULT_PILOT_OFFERS.find((o) => o.id === offerId) || DEFAULT_PILOT_OFFERS[0];
-        setSelectedOffer(found);
-        return;
-      }
-
-      const { data, error: err } = await supabase
-        .from("pilot_offers")
-        .select(`
-          *,
-          challenges!inner(*),
-          applications:challenge_applications!left(*),
-          startup_profile:profiles!pilot_offers_startup_id_fkey(full_name, organization_name, sector, email, website, description, govt_level)
-        `)
-        .eq("id", offerId)
-        .single();
-
-      if (err || !data) {
-        const found = DEFAULT_PILOT_OFFERS.find((o) => o.id === offerId) || DEFAULT_PILOT_OFFERS[0];
-        setSelectedOffer(found);
-      } else {
-        setSelectedOffer(data);
-      }
-    } catch {
-      const found = DEFAULT_PILOT_OFFERS.find((o) => o.id === offerId) || DEFAULT_PILOT_OFFERS[0];
-      setSelectedOffer(found);
-    } finally {
-      setDetailLoading(false);
-    }
-  }, [user]);
 
   // If a pilotId is in the URL, load that offer's detail
   useEffect(() => {
