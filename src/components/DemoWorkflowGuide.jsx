@@ -73,46 +73,60 @@ export default function DemoWorkflowGuide() {
   }, [location.pathname, location.state]);
 
   const handleExecuteStage = (stage) => {
-    // 1. Ensure required demo account is active
-    if (stage.role === "government" && (!user || role !== "government")) {
-      signInDemo("janparichay");
-    } else if (stage.role === "startup" && (!user || role !== "startup")) {
-      signInDemo("startup");
+    // 1. Check if we need to switch the demo account
+    const needsSwitch =
+      (stage.role === "government" && (!user || role !== "government")) ||
+      (stage.role === "startup" && (!user || role !== "startup"));
+
+    if (needsSwitch) {
+      const demoKey = stage.role === "government" ? "janparichay" : "startup";
+      signInDemo(demoKey);
     }
 
     setCurrentStep(stage.step);
 
-    // 2. Navigate to target
-    navigate(stage.path, { state: stage.state });
+    // 2. Navigate AFTER React state from signInDemo settles (setTimeout 0 lets the
+    //    synchronous setState batch flush so ProtectedRoute sees the new role)
+    const doNavigate = () => {
+      navigate(stage.path, { state: stage.state || {} });
 
-    // 3. If scrolling to results is requested
-    if (stage.state?.scrollToResults) {
-      setTimeout(() => {
-        const el = document.getElementById("pilot-results-section") || document.querySelector("h3:contains('Pilot Results')");
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 500);
+      // 3. If scrolling to results is requested
+      if (stage.state?.scrollToResults) {
+        setTimeout(() => {
+          const el = document.getElementById("pilot-results-section");
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 600);
+      }
+    };
+
+    if (needsSwitch) {
+      // Give React a tick to flush the state update from signInDemo
+      setTimeout(doNavigate, 50);
+    } else {
+      doNavigate();
     }
   };
 
   const handleNext = () => {
-    const nextIndex = currentStep < 6 ? currentStep : 1;
-    const nextStage = WORKFLOW_STAGES[nextIndex] || WORKFLOW_STAGES[0];
+    // WORKFLOW_STAGES is 0-indexed, steps are 1-6
+    const nextStep = currentStep < 6 ? currentStep + 1 : 1;
+    const nextStage = WORKFLOW_STAGES.find(s => s.step === nextStep) || WORKFLOW_STAGES[0];
     handleExecuteStage(nextStage);
   };
 
   const handlePrev = () => {
-    const prevIndex = currentStep > 1 ? currentStep - 2 : 5;
-    const prevStage = WORKFLOW_STAGES[prevIndex] || WORKFLOW_STAGES[0];
+    const prevStep = currentStep > 1 ? currentStep - 1 : 6;
+    const prevStage = WORKFLOW_STAGES.find(s => s.step === prevStep) || WORKFLOW_STAGES[0];
     handleExecuteStage(prevStage);
   };
 
   const toggleRole = () => {
     if (role === "government") {
       signInDemo("startup");
-      navigate("/startup/dashboard");
+      setTimeout(() => navigate("/startup/dashboard"), 50);
     } else {
       signInDemo("janparichay");
-      navigate("/government/dashboard");
+      setTimeout(() => navigate("/government/dashboard"), 50);
     }
   };
 
